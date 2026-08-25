@@ -8,7 +8,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "MichieAdmin2024";
 
-const API_KEY = process.env.GEMINI_API_KEY || "AQ.Ab8RN6K3EsDJFYc4AgCx0mSmudu_Yfhi0x5U4pa6THmTZtw9Yw"; 
+const API_KEY = process.env.GEMINI_API_KEY || "AQ.Ab8RN6JVw0CaSMkYQ1441zAMJ8_8HbIr3SCUMZ1vb4MvNtfnUQ"; 
 const genAI = new GoogleGenerativeAI(API_KEY);
 
 // Set up public folder and persistent uploads directory
