@@ -6,29 +6,44 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "MichieAdmin2024";
 
-// Set up Gemini. Add your actual key on Render via Environment Variables.
 const API_KEY = process.env.GEMINI_API_KEY || "YOUR_GEMINI_API_KEY_HERE"; 
 const genAI = new GoogleGenerativeAI(API_KEY);
 
-// Multer storage setup (stores temporarily in memory for speed before processing, or disk)
-// Given 24 images, disk storage is safer for memory limits on standard Render instances.
-const uploadDir = path.join(__dirname, 'uploads');
+// Set up public folder and persistent uploads directory
+const publicDir = path.join(__dirname, 'public');
+const uploadDir = path.join(publicDir, 'uploads');
+const dataFilePath = path.join(uploadDir, 'qa-reports.json');
+
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
 }
 
+// Load database into memory
+let reports = [];
+function loadReports() {
+    if (fs.existsSync(dataFilePath)) {
+        try {
+            const parsed = JSON.parse(fs.readFileSync(dataFilePath));
+            reports = Array.isArray(parsed) ? parsed : [];
+        } catch (e) {
+            reports = [];
+        }
+    }
+}
+loadReports();
+
 const storage = multer.diskStorage({
     destination: (req, file, cb) => { cb(null, uploadDir); },
-    filename: (req, file, cb) => { cb(null, Date.now() + '-' + file.originalname); }
+    filename: (req, file, cb) => { cb(null, Date.now() + '-' + file.originalname.replace(/[^a-zA-Z0-9.]/g, '')); }
 });
 
-// Allow up to 30 photos to be safe
 const upload = multer({ storage: storage, limits: { fileSize: 10 * 1024 * 1024 } }); 
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static('public')); // Assuming you put contractor-portal.html in a /public folder
+app.use(express.static('public'));
 
 app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
@@ -39,7 +54,6 @@ app.use((req, res, next) => {
 async function runQAAnalysis(filePaths, details) {
     const model = genAI.getGenerativeModel({ model: "gemini-3.1-pro-preview" }); 
     
-    // Convert files to base64 inline data format for Gemini
     const imageParts = filePaths.map((p) => ({ 
         inlineData: { 
             data: Buffer.from(fs.readFileSync(p)).toString('base64'), 
@@ -79,16 +93,13 @@ async function runQAAnalysis(filePaths, details) {
         "score": 8.7,
         "summary": "Great work on the interior extraction, but the wheels could use a bit more tire shine...",
         "analysis": [
-            {"label": "Front Exterior", "feedback": "Paint looks glossy and streak-free."},
-            {"label": "Hood", "feedback": "Good gloss, no visible bug guts."}
-            // ... must include exactly all labels passed in the prompt
+            {"label": "Front Exterior", "feedback": "Paint looks glossy and streak-free."}
         ]
     }`;
 
     try {
         const result = await model.generateContent([prompt, ...imageParts]);
         const response = await result.response;
-        // Clean markdown if present
         let text = response.text().replace(/```json/g, "").replace(/```/g, "").trim();
         return JSON.parse(text);
     } catch (error) {
@@ -96,6 +107,8 @@ async function runQAAnalysis(filePaths, details) {
         throw new Error("AI Analysis Failed.");
     }
 }
+
+// --- PORTAL ENDPOINTS ---
 
 app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
     try {
@@ -105,7 +118,6 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
 
         const filePaths = req.files.map(f => f.path);
         
-        // Extract data
         const details = {
             contractorName: req.body.contractorName,
             vehicleYear: req.body.vehicleYear,
@@ -118,22 +130,82 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
             labels: JSON.parse(req.body.labels || "[]")
         };
 
-        // Run Gemini QA
         const aiReport = await runQAAnalysis(filePaths, details);
 
-        // Cleanup temporary files after analysis to save server space
-        filePaths.forEach(fp => {
-            if(fs.existsSync(fp)) fs.unlinkSync(fp);
+        // Inject image URLs into the analysis breakdown for the admin portal
+        const formattedAnalysis = details.labels.map((label, index) => {
+            let feedback = "No specific feedback provided by AI.";
+            if (aiReport.analysis && aiReport.analysis[index]) {
+                feedback = aiReport.analysis[index].feedback;
+            } else if (aiReport.analysis) {
+                const match = aiReport.analysis.find(a => a.label === label);
+                if (match) feedback = match.feedback;
+            }
+
+            return {
+                label: label,
+                feedback: feedback,
+                img: '/uploads/' + path.basename(filePaths[index] || '')
+            };
         });
 
-        // Optional: Save this report to a database here so admin can view it later
+        // Construct Database Record
+        const reportData = {
+            id: Date.now().toString(),
+            timestamp: new Date().toLocaleString("en-US", { timeZone: "America/Chicago" }),
+            contractor: details.contractorName,
+            vehicle: `${details.vehicleYear} ${details.vehicleMake} ${details.vehicleModel}`,
+            serviceLevel: details.serviceLevel,
+            score: aiReport.score,
+            summary: aiReport.summary,
+            analysis: formattedAnalysis
+        };
 
-        res.json(aiReport);
+        // Save to Database
+        reports.unshift(reportData);
+        fs.writeFileSync(dataFilePath, JSON.stringify(reports));
+
+        // Return the clean data to the contractor frontend
+        res.json({
+            score: aiReport.score,
+            summary: aiReport.summary,
+            analysis: formattedAnalysis
+        });
 
     } catch (e) {
         console.error("QA Scan Error:", e);
         res.status(500).json({ error: true, message: e.message });
     }
+});
+
+// --- ADMIN ENDPOINTS ---
+
+app.post('/admin/login', (req, res) => {
+    if (req.body.password === ADMIN_PASSWORD) res.sendStatus(200);
+    else res.sendStatus(401);
+});
+
+app.get('/admin/reports', (req, res) => {
+    res.json(reports);
+});
+
+app.delete('/admin/reports/:id', (req, res) => {
+    const id = req.params.id;
+    const report = reports.find(r => r.id === id);
+    
+    // Delete the saved images from the hard drive
+    if (report && report.analysis) {
+        report.analysis.forEach(item => {
+            if (item.img) {
+                const filePath = path.join(publicDir, item.img);
+                if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+            }
+        });
+    }
+    
+    reports = reports.filter(r => r.id !== id);
+    fs.writeFileSync(dataFilePath, JSON.stringify(reports));
+    res.sendStatus(200);
 });
 
 app.listen(PORT, () => {
