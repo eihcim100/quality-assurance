@@ -52,7 +52,7 @@ app.use((req, res, next) => {
 });
 
 async function runQAAnalysis(filePaths, details) {
-    const model = genAI.getGenerativeModel({ model: "gemini-3.1-pro" }); 
+    const model = genAI.getGenerativeModel({ model: "gemini-3.1-pro-preview" }); 
     
     const imageParts = filePaths.map((p) => ({ 
         inlineData: { 
