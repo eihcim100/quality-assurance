@@ -8,6 +8,10 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "MichieAdmin2024";
 
+// Inter-service Communication Keys
+const CRM_API_URL = process.env.CRM_API_URL || "https://michie-detailing-backend.onrender.com";
+const ADMIN_API_KEY = process.env.ADMIN_API_KEY || "YOUR_ADMIN_API_KEY"; 
+
 const API_KEY = process.env.GEMINI_API_KEY || "GEMINI_API_KEY"; 
 const genAI = new GoogleGenerativeAI(API_KEY);
 
@@ -52,17 +56,25 @@ app.use((req, res, next) => {
     next();
 });
 
-async function runQAAnalysis(filePaths, details) {
+// Helper to fetch Before Photos from URLs to base64
+async function fetchImageToB64(url) {
+    try {
+        if (url.startsWith('/')) { url = 'https://michieauto.com' + url; }
+        const response = await fetch(url);
+        const arrayBuffer = await response.arrayBuffer();
+        return Buffer.from(arrayBuffer).toString('base64');
+    } catch (e) {
+        console.error("Failed to fetch before photo:", url, e);
+        return null;
+    }
+}
+
+async function runQAAnalysis(filePaths, details, beforePhotosUrls = []) {
     const model = genAI.getGenerativeModel({ model: "gemini-3.1-pro-preview" }); 
     
-    const imageParts = filePaths.map((p) => ({ 
-        inlineData: { 
-            data: Buffer.from(fs.readFileSync(p)).toString('base64'), 
-            mimeType: "image/jpeg" 
-        } 
-    }));
-
-    const prompt = `ACT AS: Master QA Inspector for Michie Auto Detailing LLC. 
+    let promptParts = [];
+    
+    const promptText = `ACT AS: Master QA Inspector for Michie Auto Detailing LLC. 
     You are evaluating an Independent Contractor's post-detail photos to ensure they meet the strict standards outlined in the Independent Contractor Agreement.
 
     CONTEXT:
@@ -79,17 +91,17 @@ async function runQAAnalysis(filePaths, details) {
     2. Premium Quality: The contractor must use high-quality chemicals. Surfaces should look treated, not greasy or dry.
     3. "When in doubt, clean it out": No obvious dirt, streaks, mud, or un-vacuumed pet hair should remain.
     4. Biohazard: If Biohazard is true, there must be NO TRACE of stains/bodily fluids.
-    5. Level 3 requires meticulous, flawless cleaning (cupholders, cracks, crevices). Level 1 is a basic but thorough refresh.
+    5. Level 3 requires meticulous cleaning. Level 1 is a basic refresh.
 
     TASK:
-    1. Analyze all provided images in sequence. Look closely for streaks on glass, dirt in door jambs, unvacuumed carpets, dirty wheels, etc.
-    2. Provide an honest, strict QA score from 0.0 to 10.0 (Use decimals, e.g., 8.4, 9.2). 
+    1. Analyze the provided photos. If "BEFORE" photos are provided, directly compare the condition of the vehicle before the detail to the "AFTER" photos completed by the contractor.
+    2. Provide an honest, strict QA score from 0.0 to 10.0 based on the transformation and final results (Use decimals, e.g., 8.4, 9.2). 
        - 9.5-10.0: Perfect, flawless execution.
        - 8.0-9.4: Great job, minor easily fixable issues.
        - 6.0-7.9: Acceptable, but noticeable corners cut.
        - < 6.0: Poor, failed inspection.
     3. Provide an executive summary of the work. Address the contractor directly and professionally.
-    4. Provide specific feedback for EACH photo label provided in the sequence. Point out what they did well in that specific shot, or what they missed.
+    4. Provide specific feedback for EACH AFTER photo label provided in the sequence. Point out what they did well in that specific shot, or what they missed based on the original condition.
 
     RETURN ONLY STRICT JSON FORMAT:
     {
@@ -100,8 +112,25 @@ async function runQAAnalysis(filePaths, details) {
         ]
     }`;
 
+    promptParts.push(promptText);
+
+    // Interleave the Before and After Photos into the Gemini Context Array
+    if (beforePhotosUrls && beforePhotosUrls.length > 0) {
+        promptParts.push("\n--- BEFORE PHOTOS (TAKEN BY CLIENT PRE-DETAIL) ---\n");
+        for (let url of beforePhotosUrls) {
+            const b64 = await fetchImageToB64(url);
+            if (b64) promptParts.push({ inlineData: { data: b64, mimeType: "image/jpeg" } });
+        }
+    }
+
+    promptParts.push("\n--- AFTER PHOTOS (TAKEN BY CONTRACTOR POST-DETAIL) ---\n");
+    const afterImageParts = filePaths.map((p) => ({ 
+        inlineData: { data: Buffer.from(fs.readFileSync(p)).toString('base64'), mimeType: "image/jpeg" } 
+    }));
+    promptParts.push(...afterImageParts);
+
     try {
-        const result = await model.generateContent([prompt, ...imageParts]);
+        const result = await model.generateContent(promptParts);
         const response = await result.response;
         let text = response.text().replace(/```json/g, "").replace(/```/g, "").trim();
         return JSON.parse(text);
@@ -122,6 +151,7 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
         const filePaths = req.files.map(f => f.path);
         
         const details = {
+            jobId: req.body.jobId, // Pulled from the hidden form field
             contractorName: req.body.contractorName,
             vehicleYear: req.body.vehicleYear,
             vehicleMake: req.body.vehicleMake,
@@ -134,7 +164,27 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
             labels: JSON.parse(req.body.labels || "[]")
         };
 
-        const aiReport = await runQAAnalysis(filePaths, details);
+        // CENTRALIZED BRAIN: Retrieve the AI Before Photos securely from the main Job Database
+        let beforePhotosUrls = [];
+        if (details.jobId) {
+            try {
+                const leadRes = await fetch(`${CRM_API_URL}/api/internal/lead/${details.jobId}`, {
+                    headers: { 'X-Admin-API-Key': ADMIN_API_KEY }
+                });
+                if (leadRes.ok) {
+                    const leadData = await leadRes.json();
+                    if (leadData.before_photos) {
+                        beforePhotosUrls = typeof leadData.before_photos === 'string' 
+                            ? JSON.parse(leadData.before_photos) 
+                            : leadData.before_photos;
+                    }
+                }
+            } catch (e) {
+                console.error("Could not fetch CRM lead data for QA:", e);
+            }
+        }
+
+        const aiReport = await runQAAnalysis(filePaths, details, beforePhotosUrls);
 
         // Inject image URLs into the analysis breakdown for the admin portal
         const formattedAnalysis = details.labels.map((label, index) => {
