@@ -1,52 +1,668 @@
-<!-- ... existing code ... -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Michie QA - Contractor Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet">
+    
     <style>
         body { 
             font-family: 'Inter', sans-serif; 
             background-color: #f8fafc; /* Slate 50 */
             color: #0f172a; /* Slate 900 */
-<!-- ... existing code ... -->
+            min-height: 100vh;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .step { display: none; } 
+        .step.active { display: block !important; animation: fadeIn 0.4s ease-out; }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .loader { 
+            border: 4px solid rgba(0, 0, 0, 0.05); 
+            border-top: 4px solid #eab308; /* Yellow 500 */
+            border-radius: 50%; 
+            width: 48px; 
+            height: 48px; 
+            animation: spin 1s linear infinite; 
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .input-light {
+            background: #ffffff;
+            border: 2px solid #cbd5e1;
+            color: #0f172a;
+            transition: all 0.3s ease;
+        }
+        .input-light:focus {
+            border-color: #eab308;
+            box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.2);
+            outline: none;
+        }
+
+        .checkbox-custom {
+            background-color: #ffffff;
+        }
+        .checkbox-custom:checked {
+            background-color: #eab308;
+            border-color: #eab308;
+        }
+
+        .error-shake {
+            animation: shake 0.4s ease-in-out;
+            border-color: #ef4444 !important;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        /* Hide scrollbar for photo gallery */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="antialiased pb-24">
+
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
+        <div class="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-yellow-400 rounded-xl flex items-center justify-center font-black text-slate-900 text-xl shadow-md">
+                    M
+                </div>
+                <div>
+                    <h1 class="font-black text-slate-900 leading-none tracking-tight uppercase italic text-lg">Contractor QA</h1>
+                    <p class="text-xs font-bold text-yellow-600 tracking-widest uppercase">Internal Portal</p>
+                </div>
+            </div>
+            <button onclick="location.reload()" class="text-xs font-bold text-slate-500 hover:text-slate-900 uppercase tracking-wider">Reset</button>
+        </div>
+    </header>
+
+    <main class="max-w-3xl mx-auto p-4 sm:p-6">
+        
+        <div id="step-1" class="step active space-y-8">
+            
+            <div class="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xl">
+                <h2 class="text-2xl font-black uppercase tracking-tight text-slate-900 mb-6 flex items-center gap-3">
+                    <span class="w-8 h-8 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-sm border border-slate-200">1</span>
+                    Job Details
+                </h2>
+                
+                <div class="space-y-5">
+                    <div>
+                        <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Contractor Full Name</label>
+                        <input id="contractor-name" type="text" placeholder="e.g. John Doe" class="w-full p-4 rounded-2xl input-light font-bold">
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Vehicle Year</label>
+                            <input id="v-year" type="number" placeholder="2024" class="w-full p-4 rounded-2xl input-light font-bold">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Make</label>
+                            <input id="v-make" type="text" placeholder="Toyota" class="w-full p-4 rounded-2xl input-light font-bold">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Model</label>
+                            <input id="v-model" type="text" placeholder="Camry" class="w-full p-4 rounded-2xl input-light font-bold">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Vehicle Type</label>
+                        <select id="v-type" class="w-full p-4 rounded-2xl input-light font-bold appearance-none bg-white">
+                            <option value="" disabled selected>Select Classification...</option>
+                            <option value="Coupe">Coupe (2-Door)</option>
+                            <option value="Sedan">Sedan (4-Door)</option>
+                            <option value="SUV">SUV</option>
+                            <option value="Truck">Truck</option>
+                            <option value="Minivan">Minivan</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Detail Type</label>
+                        <select id="d-type" class="w-full p-4 rounded-2xl input-light font-bold appearance-none bg-white">
+                            <option value="" disabled selected>Select Scope of Work...</option>
+                            <option value="exterior">Exterior Only (10 Photos)</option>
+                            <option value="interior">Interior Only (20 Photos)</option>
+                            <option value="full">Full Detail (Inside & Out) (30 Photos)</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Completed Service Level</label>
+                        <select id="s-level" class="w-full p-4 rounded-2xl input-light font-bold appearance-none bg-white">
+                            <option value="" disabled selected>Select Service Performed...</option>
+                            <option value="Level 1">Level 1: Essential Refresh</option>
+                            <option value="Level 2">Level 2: Deep Clean & Protect</option>
+                            <option value="Level 3">Level 3: The Showroom Standard</option>
+                        </select>
+                    </div>
+
+                    <div class="pt-4 border-t border-slate-200 space-y-4">
+                        <label class="flex items-center gap-4 p-4 rounded-2xl border border-slate-300 bg-slate-50 cursor-pointer hover:bg-slate-100 transition">
+                            <input type="checkbox" id="chk-biohazard" class="w-6 h-6 rounded border-slate-300 checkbox-custom appearance-none checked:bg-yellow-400 flex-shrink-0 relative after:content-[''] after:absolute after:hidden checked:after:block after:left-[8px] after:top-[4px] after:w-[6px] after:h-[12px] after:border-solid after:border-slate-900 after:border-r-2 after:border-b-2 after:rotate-45">
+                            <div>
+                                <p class="font-bold text-slate-900 uppercase tracking-wider text-sm">Biohazard Cleanup</p>
+                                <p class="text-xs text-slate-500">Poop, Urine, Vomit, Blood, or Mold remediation completed.</p>
+                            </div>
+                        </label>
+                        
+                        <label class="flex items-center gap-4 p-4 rounded-2xl border border-slate-300 bg-slate-50 cursor-pointer hover:bg-slate-100 transition">
+                            <input type="checkbox" id="chk-smoke" class="w-6 h-6 rounded border-slate-300 checkbox-custom appearance-none checked:bg-yellow-400 flex-shrink-0 relative after:content-[''] after:absolute after:hidden checked:after:block after:left-[8px] after:top-[4px] after:w-[6px] after:h-[12px] after:border-solid after:border-slate-900 after:border-r-2 after:border-b-2 after:rotate-45">
+                            <div>
+                                <p class="font-bold text-slate-900 uppercase tracking-wider text-sm">Smoke / Odor Clean</p>
+                                <p class="text-xs text-slate-500">Ozone or heavy chemical odor removal performed.</p>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <button onclick="startPhotoCapture()" class="w-full bg-yellow-400 hover:bg-yellow-500 text-slate-900 p-6 rounded-3xl font-black uppercase tracking-[0.2em] shadow-xl shadow-yellow-400/20 transition-all active:scale-95 text-lg flex items-center justify-center gap-3">
+                Begin Photo Scan
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+            </button>
+        </div>
+
+        <div id="step-2" class="step space-y-6">
+            
+            <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-xl relative overflow-hidden">
+                <div class="absolute top-0 left-0 h-1.5 bg-yellow-400 transition-all duration-300" id="progress-bar" style="width: 0%;"></div>
+                
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <p class="text-yellow-600 font-black text-xs uppercase tracking-widest mb-1">Target Area</p>
+                        <h2 id="stage-title" class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight leading-tight">
+                            📸 Front Exterior
+                        </h2>
+                    </div>
+                    <div class="w-12 h-12 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-black text-slate-900">
+                        <span id="stage-counter">1</span><span class="text-slate-400 text-xs">/<span id="stage-counter-total">30</span></span>
+                    </div>
+                </div>
+
+                <div class="relative group mt-4">
+                    <input id="photo-input" type="file" accept="image/*" capture="environment" onchange="handlePhotoSelection(event)" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+                    <div class="aspect-[4/3] sm:aspect-video bg-slate-50 rounded-2xl border-4 border-dashed border-slate-300 flex flex-col items-center justify-center overflow-hidden relative transition-colors group-hover:border-yellow-400/80">
+                        <img id="preview-img" class="w-full h-full object-cover hidden absolute inset-0 z-0">
+                        
+                        <div id="upload-text" class="text-center p-6 relative z-10 pointer-events-none">
+                            <div class="w-16 h-16 bg-white text-slate-600 rounded-full flex items-center justify-center mx-auto shadow-sm border border-slate-200 mb-4 group-hover:bg-yellow-400 group-hover:text-slate-900 transition-colors">
+                                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                            </div>
+                            <p class="font-black text-slate-900 uppercase tracking-wider text-lg">Tap to Capture</p>
+                            <p class="text-slate-500 text-xs mt-2 font-medium">Ensure clear lighting. Use landscape mode if possible.</p>
+                        </div>
+
+                        <!-- Retake overlay -->
+                        <div id="retake-overlay" class="hidden absolute inset-0 bg-white/60 flex items-center justify-center backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity">
+                            <p class="text-slate-900 font-black uppercase tracking-widest bg-white/90 px-6 py-3 rounded-full border border-slate-300 shadow-md">Tap to Retake</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex gap-4">
+                <button id="btn-back" onclick="prevPhoto()" class="hidden w-1/3 bg-white hover:bg-slate-50 text-slate-900 p-5 rounded-2xl font-black uppercase tracking-wider border border-slate-300 shadow-sm transition-all active:scale-95">
+                    Back
+                </button>
+                <button id="btn-next" onclick="nextPhoto()" class="w-full bg-yellow-400 hover:bg-yellow-500 text-slate-900 p-5 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-yellow-400/20 transition-all active:scale-95 text-lg">
+                    Next
+                </button>
+            </div>
+            
+            <p id="photo-err" class="text-center text-red-600 font-bold text-sm hidden">⚠️ Capture a photo before proceeding.</p>
+
+            <div class="mt-8">
+                <p class="text-xs font-black text-slate-500 uppercase tracking-widest mb-3">Gallery Progress</p>
+                <div id="thumbnail-track" class="flex gap-2 overflow-x-auto no-scrollbar pb-2">
+                    <!-- Thumbnails generated by JS -->
+                </div>
+            </div>
+        </div>
+
+        <div id="step-3" class="step py-20 text-center">
+            <div class="flex justify-center mb-8">
+                <div class="loader"></div>
+            </div>
+            <h2 class="text-2xl font-black uppercase tracking-widest text-slate-900 mb-2">Analyzing Quality</h2>
+            <p class="text-slate-600 font-medium max-w-md mx-auto">Running contractor compliance protocols and checking for defects, streaks, and missed areas against the Independent Contractor Agreement...</p>
+            
+            <div class="max-w-xs mx-auto mt-12 bg-slate-200 rounded-full h-2 overflow-hidden">
+                <div class="bg-yellow-400 h-full w-full origin-left animate-[scaleX_3s_ease-in-out_infinite]"></div>
+            </div>
+        </div>
+
+        <div id="step-4" class="step">
+            <div class="bg-white rounded-[2.5rem] p-6 sm:p-10 border border-slate-200 shadow-2xl overflow-hidden relative">
+                
+                <!-- Background decoration -->
+                <div class="absolute -top-20 -right-20 w-64 h-64 bg-yellow-400/20 rounded-full blur-3xl"></div>
+
+                <div class="relative z-10 flex flex-col items-center border-b border-slate-200 pb-8 mb-8">
+                    <p class="text-yellow-600 font-black uppercase tracking-[0.3em] text-xs mb-4">Official QA Score</p>
+                    
+                    <div id="score-circle" class="w-48 h-48 rounded-full flex items-center justify-center border-[12px] shadow-xl bg-white mb-6">
+                        <span id="final-score" class="text-7xl font-black tracking-tighter">0.0</span>
+                    </div>
+                    
                     <h1 class="text-3xl font-black uppercase italic tracking-tight text-center text-slate-900" id="contractor-display">Contractor Name</h1>
                     <p class="text-slate-500 font-bold uppercase tracking-widest text-sm mt-2 text-center" id="vehicle-display">Year Make Model | Type</p>
                 </div>
 
                 <div class="relative z-10 space-y-6 mb-10">
-<!-- ... existing code ... -->
+                    <div class="bg-slate-50 p-6 rounded-2xl border border-slate-200">
+                        <h3 class="text-xs font-black text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            Executive Summary
+                        </h3>
+                        <p id="summary-display" class="text-slate-800 text-sm leading-relaxed font-medium">Loading summary...</p>
+                    </div>
+                </div>
+
+                <div class="relative z-10">
+                    <h3 class="text-sm font-black text-slate-900 uppercase tracking-widest mb-6 border-l-4 border-yellow-400 pl-3">Photo Breakdown Analysis</h3>
+                    <div id="analysis-container" class="space-y-8">
+                        <!-- Dynamic content injected here -->
+                    </div>
+                </div>
+
+                <button onclick="location.reload()" class="w-full mt-10 bg-slate-800 hover:bg-slate-900 text-white p-5 rounded-2xl font-black uppercase tracking-widest transition-colors shadow-lg">
+                    Start New Scan
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        // Preset shot lists depending on the service scope
+        const STAGE_PRESETS = {
+            exterior: [
+                "Front Exterior", "Hood & Grill", "Driver Side Exterior",
+                "Driver Front Wheel & Well", "Driver Rear Wheel & Well",
+                "Rear Exterior / Trunk Lid", "Passenger Side Exterior",
+                "Passenger Front Wheel & Well", "Passenger Rear Wheel & Well",
+                "Roof"
+            ],
+            interior: [
+                "Driver Front Door Panel", "Driver Seat", "Driver Floor & Pedals",
+                "Steering Wheel & Gauges", "Center Console", "Cupholders",
+                "Dashboard", "Infotainment / Vents", "Passenger Front Door Panel",
+                "Passenger Seat", "Passenger Floor", "Glovebox Area",
+                "Driver Side Rear Door Panel", "Passenger Side Rear Door Panel",
+                "Rear Seats", "Rear Floors", "Headliner / Interior Roof",
+                "Trunk Interior / Cargo Area", "Spare Tire / Hidden Compartment",
+                "Inside Windows (General)"
+            ],
+            full: [
+                "Front Exterior", "Hood", "Front Bumper / Grill",
+                "Driver Side Exterior", "Driver Front Wheel & Well", "Driver Rear Wheel & Well",
+                "Rear Exterior / Trunk Lid", "Passenger Side Exterior", "Passenger Front Wheel & Well",
+                "Passenger Rear Wheel & Well", "Roof", 
+                "Driver Front Door Panel", "Driver Seat", "Driver Floor & Pedals",
+                "Steering Wheel & Gauges", "Center Console & Cupholders", "Dashboard & Infotainment",
+                "Passenger Front Door Panel", "Passenger Seat", "Passenger Floor",
+                "Driver Side Rear Door Panel", "Passenger Side Rear Door Panel",
+                "Rear Seats", "Rear Floors", "Headliner / Interior Roof", 
+                "Trunk Interior / Cargo Area", "Spare Tire / Hidden Compartment",
+                "Interior Glass (Front)", "Interior Glass (Rear)", "Final Walkaround / Entire Vehicle"
+            ]
+        };
+
         let STAGES = []; 
         let capturedPhotos = []; 
         let currentIdx = 0;
 
-        // Auto-fill form data if available
+        // Auto-fill form data sent from the Job Portal Database (Smart Parser)
         document.addEventListener("DOMContentLoaded", () => {
             const urlParams = new URLSearchParams(window.location.search);
-            const formData = new URLSearchParams(window.location.hash.substring(1)); // Some systems use hash for POST data emulation
 
-            // Extract data from URL or local storage
-            let vYear = urlParams.get('v-year') || formData.get('v-year') || localStorage.getItem('prefill-v-year');
-            let vMake = urlParams.get('v-make') || formData.get('v-make') || localStorage.getItem('prefill-v-make');
-            let vModel = urlParams.get('v-model') || formData.get('v-model') || localStorage.getItem('prefill-v-model');
-            let sLevel = urlParams.get('s-level') || formData.get('s-level') || localStorage.getItem('prefill-s-level');
+            let vYear = urlParams.get('v-year');
+            let vMake = urlParams.get('v-make');
+            let vModel = urlParams.get('v-model');
+            let serviceLevelString = urlParams.get('s-level'); // Received from your 'leads' database
 
             if (vYear) document.getElementById('v-year').value = vYear;
             if (vMake) document.getElementById('v-make').value = vMake;
             if (vModel) document.getElementById('v-model').value = vModel;
             
-            if (sLevel) {
-                let options = document.getElementById('s-level').options;
-                for (let i = 0; i < options.length; i++) {
-                    if (options[i].text.toLowerCase().includes(sLevel.toLowerCase()) || options[i].value.toLowerCase().includes(sLevel.toLowerCase())) {
-                        document.getElementById('s-level').selectedIndex = i;
-                        break;
-                    }
+            // Smart Parser: Breaks down the single 'service_level' string from your database 
+            // into the two distinct QA portal fields (Detail Type & Completed Service Level)
+            if (serviceLevelString) {
+                const slLower = serviceLevelString.toLowerCase();
+                
+                // 1. Guess the Detail Type (Scope)
+                const dTypeEl = document.getElementById('d-type');
+                if (slLower.includes('full') || slLower.includes('complete')) {
+                    dTypeEl.value = 'full';
+                } else if (slLower.includes('interior') && !slLower.includes('exterior')) {
+                    dTypeEl.value = 'interior';
+                } else if (slLower.includes('exterior') && !slLower.includes('interior')) {
+                    dTypeEl.value = 'exterior';
+                }
+
+                // 2. Guess the Service Level
+                const sLevelEl = document.getElementById('s-level');
+                if (slLower.includes('level 1') || slLower.includes('essential')) {
+                    sLevelEl.value = 'Level 1';
+                } else if (slLower.includes('level 2') || slLower.includes('deep')) {
+                    sLevelEl.value = 'Level 2';
+                } else if (slLower.includes('level 3') || slLower.includes('showroom')) {
+                    sLevelEl.value = 'Level 3';
                 }
             }
-
-            // Clear local storage after use
-            localStorage.removeItem('prefill-v-year');
-            localStorage.removeItem('prefill-v-make');
-            localStorage.removeItem('prefill-v-model');
-            localStorage.removeItem('prefill-s-level');
         });
 
         function showError(inputId) {
             const el = document.getElementById(inputId);
-<!-- ... existing code ... -->
+            el.classList.add('error-shake');
+            setTimeout(() => el.classList.remove('error-shake'), 400);
+        }
+
+        function showStep(stepNum) {
+            document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
+            document.getElementById('step-' + stepNum).classList.add('active');
+            window.scrollTo(0,0);
+        }
+
+        function startPhotoCapture() {
+            const reqs = ['contractor-name', 'v-year', 'v-make', 'v-model', 'v-type', 'd-type', 's-level'];
+            let valid = true;
+            reqs.forEach(id => {
+                if(!document.getElementById(id).value.trim()) {
+                    showError(id);
+                    valid = false;
+                }
+            });
+            if(!valid) return;
+
+            const detailType = document.getElementById('d-type').value;
+            STAGES = STAGE_PRESETS[detailType];
+            capturedPhotos = new Array(STAGES.length).fill(null);
+            currentIdx = 0;
+            
+            document.getElementById('stage-counter-total').innerText = STAGES.length;
+
+            initThumbnailTrack();
+            updateCameraUI();
+            showStep(2);
+        }
+
+        function initThumbnailTrack() {
+            const track = document.getElementById('thumbnail-track');
+            track.innerHTML = '';
+            STAGES.forEach((stage, i) => {
+                track.innerHTML += `
+                    <div id="thumb-${i}" class="w-12 h-12 flex-shrink-0 rounded-lg border-2 border-slate-300 bg-white overflow-hidden opacity-50 transition-all cursor-pointer shadow-sm" onclick="jumpToPhoto(${i})">
+                        <div class="w-full h-full flex items-center justify-center text-xs text-slate-500 font-black">${i+1}</div>
+                    </div>
+                `;
+            });
+        }
+
+        // On-device compression to prevent server memory crashes with up to 30 images
+        async function shrinkImage(file) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.src = e.target.result;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const MAX_WIDTH = 1024; // Compress to max 1024px width
+                        let width = img.width; 
+                        let height = img.height;
+                        
+                        if (width > MAX_WIDTH) { 
+                            height *= MAX_WIDTH / width; 
+                            width = MAX_WIDTH; 
+                        }
+                        canvas.width = width; 
+                        canvas.height = height;
+                        
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        canvas.toBlob((blob) => {
+                            resolve(new File([blob], file.name, { type: 'image/jpeg' }));
+                        }, 'image/jpeg', 0.7); // 70% quality JPEG
+                    };
+                };
+            });
+        }
+
+        async function handlePhotoSelection(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            document.getElementById('photo-err').classList.add('hidden');
+            
+            document.getElementById('upload-text').innerHTML = '<p class="font-bold text-slate-900">Compressing...</p>';
+            
+            const compressedFile = await shrinkImage(file);
+            capturedPhotos[currentIdx] = compressedFile;
+            
+            document.getElementById('upload-text').innerHTML = `
+                <div class="w-16 h-16 bg-white text-slate-600 rounded-full flex items-center justify-center mx-auto shadow-sm border border-slate-200 mb-4 group-hover:bg-yellow-400 group-hover:text-slate-900 transition-colors">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                </div>
+                <p class="font-black text-slate-900 uppercase tracking-wider text-lg">Tap to Capture</p>
+                <p class="text-slate-500 text-xs mt-2 font-medium">Ensure clear lighting. Use landscape mode if possible.</p>
+            `;
+
+            updateCameraUI();
+        }
+
+        function updateCameraUI() {
+            document.getElementById('stage-title').innerText = STAGES[currentIdx];
+            document.getElementById('stage-counter').innerText = currentIdx + 1;
+            
+            const pct = ((currentIdx) / STAGES.length) * 100;
+            document.getElementById('progress-bar').style.width = `${pct}%`;
+
+            const previewImg = document.getElementById('preview-img');
+            const uploadText = document.getElementById('upload-text');
+            const overlay = document.getElementById('retake-overlay');
+            const fileInput = document.getElementById('photo-input');
+
+            if (capturedPhotos[currentIdx]) {
+                previewImg.src = URL.createObjectURL(capturedPhotos[currentIdx]);
+                previewImg.classList.remove('hidden');
+                uploadText.classList.add('hidden');
+                overlay.classList.remove('hidden');
+                fileInput.required = false;
+            } else {
+                previewImg.src = '';
+                previewImg.classList.add('hidden');
+                uploadText.classList.remove('hidden');
+                overlay.classList.add('hidden');
+                fileInput.required = true;
+                fileInput.value = "";
+            }
+
+            document.getElementById('btn-back').classList.toggle('hidden', currentIdx === 0);
+            
+            const nextBtn = document.getElementById('btn-next');
+            if (currentIdx === STAGES.length - 1) {
+                nextBtn.innerText = "Submit Report";
+                nextBtn.classList.remove('bg-yellow-400', 'hover:bg-yellow-500', 'text-slate-900');
+                nextBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'text-white');
+            } else {
+                nextBtn.innerText = "Next";
+                nextBtn.classList.add('bg-yellow-400', 'hover:bg-yellow-500', 'text-slate-900');
+                nextBtn.classList.remove('bg-green-500', 'hover:bg-green-600', 'text-white');
+            }
+
+            updateThumbnails();
+        }
+
+        function updateThumbnails() {
+            for(let i=0; i<STAGES.length; i++) {
+                const thumb = document.getElementById('thumb-'+i);
+                if (!thumb) continue;
+                
+                thumb.classList.remove('border-yellow-500', 'opacity-100', 'scale-110');
+                
+                if (i === currentIdx) {
+                    thumb.classList.add('border-yellow-500', 'opacity-100', 'scale-110');
+                } else if (capturedPhotos[i]) {
+                    thumb.classList.add('opacity-100');
+                    thumb.classList.remove('opacity-50');
+                    thumb.innerHTML = `<img src="${URL.createObjectURL(capturedPhotos[i])}" class="w-full h-full object-cover">`;
+                }
+            }
+            
+            const activeThumb = document.getElementById('thumb-'+currentIdx);
+            if (activeThumb) {
+                activeThumb.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+            }
+        }
+
+        function jumpToPhoto(idx) {
+            if (idx < currentIdx || capturedPhotos[currentIdx]) {
+                currentIdx = idx;
+                updateCameraUI();
+            }
+        }
+
+        function prevPhoto() {
+            if (currentIdx > 0) {
+                currentIdx--;
+                updateCameraUI();
+            }
+        }
+
+        function nextPhoto() {
+            if (!capturedPhotos[currentIdx]) {
+                document.getElementById('photo-err').classList.remove('hidden');
+                return;
+            }
+            
+            if (currentIdx < STAGES.length - 1) {
+                currentIdx++;
+                updateCameraUI();
+            } else {
+                submitReport();
+            }
+        }
+
+        function messageBox(title, msg) {
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-slate-900/80 z-[100] flex items-center justify-center p-4 backdrop-blur-sm';
+            modal.innerHTML = `
+                <div class="bg-white p-8 rounded-3xl max-w-sm w-full border border-slate-200 shadow-2xl text-center">
+                    <h3 class="text-xl font-black text-slate-900 uppercase mb-2">${title}</h3>
+                    <p class="text-slate-600 mb-6 font-medium">${msg}</p>
+                    <button class="w-full bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-black uppercase p-4 rounded-xl transition-colors" onclick="this.closest('.fixed').remove()">Understood</button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        async function submitReport() {
+            showStep(3); // Loading screen
+
+            const formData = new FormData();
+            formData.append('contractorName', document.getElementById('contractor-name').value);
+            formData.append('vehicleYear', document.getElementById('v-year').value);
+            formData.append('vehicleMake', document.getElementById('v-make').value);
+            formData.append('vehicleModel', document.getElementById('v-model').value);
+            formData.append('vehicleType', document.getElementById('v-type').value);
+            
+            const dTypeEl = document.getElementById('d-type');
+            formData.append('detailType', dTypeEl.options[dTypeEl.selectedIndex].text);
+            
+            formData.append('serviceLevel', document.getElementById('s-level').value);
+            formData.append('biohazard', document.getElementById('chk-biohazard').checked);
+            formData.append('smoke', document.getElementById('chk-smoke').checked);
+            formData.append('labels', JSON.stringify(STAGES));
+
+            capturedPhotos.forEach((file, index) => {
+                if (file) formData.append('photos', file, `photo_${index}.jpg`);
+            });
+
+            try {
+                // Point this to your Render backend API
+                const response = await fetch('/api/qa-scan', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error("Server rejected request");
+                const data = await response.json();
+                
+                renderFinalReport(data);
+
+            } catch (error) {
+                console.error(error);
+                messageBox("Network Error", "Failed to connect to the QA analysis server. Please check your connection and try again.");
+                showStep(2); 
+            }
+        }
+
+        function renderFinalReport(data) {
+            showStep(4);
+            
+            const rawScore = parseFloat(data.score) || 0;
+            const formattedScore = rawScore.toFixed(1);
+            
+            const scoreEl = document.getElementById('final-score');
+            const scoreCircle = document.getElementById('score-circle');
+            
+            scoreEl.innerText = formattedScore;
+
+            if (rawScore >= 9.0) {
+                scoreEl.className = "text-7xl font-black tracking-tighter text-green-600";
+                scoreCircle.className = "w-48 h-48 rounded-full flex items-center justify-center border-[12px] shadow-xl bg-white mb-6 border-green-500";
+            } else if (rawScore >= 7.5) {
+                scoreEl.className = "text-7xl font-black tracking-tighter text-yellow-500";
+                scoreCircle.className = "w-48 h-48 rounded-full flex items-center justify-center border-[12px] shadow-xl bg-white mb-6 border-yellow-400";
+            } else {
+                scoreEl.className = "text-7xl font-black tracking-tighter text-red-600";
+                scoreCircle.className = "w-48 h-48 rounded-full flex items-center justify-center border-[12px] shadow-xl bg-white mb-6 border-red-500";
+            }
+
+            document.getElementById('contractor-display').innerText = document.getElementById('contractor-name').value;
+            
+            const dTypeEl = document.getElementById('d-type');
+            const selectedDetailScope = dTypeEl.options[dTypeEl.selectedIndex].text;
+            document.getElementById('vehicle-display').innerText = 
+                `${document.getElementById('v-year').value} ${document.getElementById('v-make').value} ${document.getElementById('v-model').value} \n ${selectedDetailScope} | ${document.getElementById('s-level').value}`;
+            
+            document.getElementById('summary-display').innerText = data.summary;
+
+            const container = document.getElementById('analysis-container');
+            container.innerHTML = "";
+
+            if(data.analysis && data.analysis.length > 0) {
+                data.analysis.forEach((item, i) => {
+                    const imgSrc = URL.createObjectURL(capturedPhotos[i]);
+                    
+                    container.innerHTML += `
+                        <div class="bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
+                            <div class="p-3 bg-slate-50 border-b border-slate-200">
+                                <p class="text-xs font-black uppercase tracking-widest text-slate-600">${item.label}</p>
+                            </div>
+                            <img src="${imgSrc}" class="w-full h-48 sm:h-64 object-cover">
+                            <div class="p-5">
+                                <p class="text-slate-800 text-sm leading-relaxed font-medium">${item.feedback}</p>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+        }
+    </script>
+</body>
+</html>
