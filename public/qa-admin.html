@@ -16,6 +16,9 @@
         .bg-score-yellow { background-color: #fef9c3; color: #854d0e; }
         .bg-score-red { background-color: #fee2e2; color: #991b1b; }
 
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
         @media print {
             body * { visibility: hidden; }
             #report-modal, #report-modal * { visibility: visible; }
@@ -92,7 +95,14 @@
     </div>
 
     <script>
+        const QUOTE_PHOTO_HOST = 'https://quote.michieauto.com';
         let allReports = [];
+
+        function formatPhotoUrl(url) {
+            if (!url) return '';
+            if (url.startsWith('http://') || url.startsWith('https://')) return url;
+            return QUOTE_PHOTO_HOST + (url.startsWith('/') ? '' : '/') + url;
+        }
 
         async function login() {
             const pass = document.getElementById('admin-pass').value;
@@ -125,6 +135,12 @@
             if (s >= 9.0) return isBackground ? 'bg-score-green' : 'score-green';
             if (s >= 7.5) return isBackground ? 'bg-score-yellow' : 'score-yellow';
             return isBackground ? 'bg-score-red' : 'score-red';
+        }
+
+        function formatCurrency(val) {
+            if (!val || val === "N/A") return "N/A";
+            const num = parseFloat(String(val).replace(/[^0-9.]/g, ''));
+            return isNaN(num) ? val : '$' + num.toFixed(2);
         }
 
         function renderReports() {
@@ -167,6 +183,25 @@
             
             const scoreColor = getScoreClass(report.score, false);
 
+            const clientName = report.clientName || 'N/A';
+            const grossPrice = formatCurrency(report.price);
+            const contractorPay = formatCurrency(report.contractorPay);
+            const aiNotes = (report.aiNotes && report.aiNotes !== "N/A") ? report.aiNotes : 'No AI work order notes available.';
+            const beforePhotos = report.beforePhotos || [];
+
+            // Before Photos HTML
+            let beforePhotosHTML = '';
+            if (beforePhotos && beforePhotos.length > 0) {
+                beforePhotosHTML = `
+                    <div class="mb-8 page-break-inside-avoid">
+                        <h3 class="text-xs font-black uppercase tracking-widest text-blue-600 mb-3">AI Scan - Before Photos</h3>
+                        <div class="flex overflow-x-auto space-x-3 pb-3 no-scrollbar border border-slate-100 p-2 rounded-2xl bg-slate-50">
+                            ${beforePhotos.map(url => `<img src="${formatPhotoUrl(url)}" class="h-32 w-32 object-cover rounded-xl shadow-sm flex-shrink-0 cursor-pointer" onclick="window.open('${formatPhotoUrl(url)}', '_blank')">`).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
             body.innerHTML = `
                 <div class="flex flex-col md:flex-row items-center gap-8 border-b border-slate-200 pb-8 mb-8">
                     <!-- Score Circle -->
@@ -175,31 +210,53 @@
                         <span class="text-[10px] uppercase tracking-widest font-bold opacity-50 mt-1">/ 10.0</span>
                     </div>
 
-                    <div class="flex-1 text-center md:text-left">
-                        <p class="text-xs font-black uppercase tracking-[0.2em] text-slate-400 mb-1">Contractor Profile</p>
-                        <h2 class="text-3xl font-black uppercase italic tracking-tight text-slate-900 mb-2">${report.contractor}</h2>
-                        <p class="text-slate-600 font-bold mb-4">${report.vehicle} &bull; ${report.serviceLevel}</p>
+                    <div class="flex-1 w-full text-center md:text-left">
+                        <p class="text-xs font-black uppercase tracking-[0.2em] text-slate-400 mb-1">Contractor Under Review</p>
+                        <h2 class="text-3xl font-black uppercase italic tracking-tight text-slate-900 mb-6">${report.contractor}</h2>
                         
-                        <div class="bg-slate-50 p-4 rounded-2xl text-sm font-medium text-slate-700 leading-relaxed border border-slate-200 shadow-sm text-left">
-                            <span class="font-black uppercase tracking-widest text-[10px] text-slate-400 block mb-2">Executive Summary</span>
-                            ${report.summary}
+                        <!-- Line-by-Line Job Details -->
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 bg-slate-50 p-5 rounded-2xl border border-slate-200 text-left mb-6 shadow-sm">
+                            <div>
+                                <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Client Name</span>
+                                <span class="text-sm font-bold text-slate-900">${clientName}</span>
+                            </div>
+                            <div>
+                                <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Vehicle</span>
+                                <span class="text-sm font-bold text-slate-900">${report.vehicle}</span>
+                            </div>
+                            <div>
+                                <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Gross Price</span>
+                                <span class="text-sm font-bold text-green-600">${grossPrice}</span>
+                            </div>
+                            <div>
+                                <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1">Contractor Pay</span>
+                                <span class="text-sm font-bold text-blue-600">${contractorPay}</span>
+                            </div>
+                        </div>
+
+                        <!-- Detailer Notes / AI Summary -->
+                        <div class="bg-blue-50 p-5 rounded-2xl text-sm font-medium text-blue-900 leading-relaxed border border-blue-100 shadow-sm text-left">
+                            <span class="font-black uppercase tracking-widest text-[10px] text-blue-500 block mb-2">AI Work Order / Detailer Notes</span>
+                            <div class="whitespace-pre-wrap">${aiNotes}</div>
                         </div>
                     </div>
                 </div>
 
+                ${beforePhotosHTML}
+
                 <div class="flex justify-between items-end mb-6 print-hide">
-                    <h3 class="text-lg font-black uppercase tracking-widest text-slate-900">Photo Breakdown</h3>
+                    <h3 class="text-lg font-black uppercase tracking-widest text-slate-900">Contractor After Photos & AI Feedback</h3>
                     <button onclick="window.print()" class="text-xs font-black uppercase tracking-widest text-blue-600 hover:text-blue-800 transition-colors">Save PDF</button>
                 </div>
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     ${report.analysis.map(item => `
-                        <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm page-break-inside-avoid">
+                        <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm page-break-inside-avoid flex flex-col">
                             <div class="bg-slate-50 border-b border-slate-200 px-4 py-3">
                                 <p class="text-xs font-black uppercase tracking-widest text-slate-600">${item.label}</p>
                             </div>
                             <img src="${item.img}" class="w-full h-48 md:h-64 object-cover" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'100\\' height=\\'100\\'><rect width=\\'100\\' height=\\'100\\' fill=\\'#f1f5f9\\'/><text x=\\'50%\\' y=\\'50%\\' dominant-baseline=\\'middle\\' text-anchor=\\'middle\\' font-family=\\'sans-serif\\' font-size=\\'12\\' fill=\\'#94a3b8\\'>Image Expired</text></svg>'">
-                            <div class="p-4">
+                            <div class="p-4 flex-grow">
                                 <p class="text-sm font-medium text-slate-700 leading-relaxed">"${item.feedback}"</p>
                             </div>
                         </div>
@@ -208,7 +265,7 @@
             `;
             
             modal.classList.remove('hidden');
-            document.body.style.overflow = 'hidden'; // Prevent background scrolling
+            document.body.style.overflow = 'hidden'; 
         }
 
         async function deleteReport(id) {
