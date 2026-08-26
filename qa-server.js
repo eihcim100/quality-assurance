@@ -56,15 +56,18 @@ app.use((req, res, next) => {
     next();
 });
 
-// Helper to fetch Before Photos from URLs to base64
+// --- FIXED DOMAIN ROUTING FOR BEFORE PHOTOS ---
 async function fetchImageToB64(url) {
     try {
-        if (url.startsWith('/')) { url = 'https://michieauto.com' + url; }
+        // Explicitly route to quote.michieauto.com where the images are hosted
+        if (!url.startsWith('http://') && !url.startsWith('https://')) { 
+            url = 'https://quote.michieauto.com' + (url.startsWith('/') ? '' : '/') + url; 
+        }
         const response = await fetch(url);
         const arrayBuffer = await response.arrayBuffer();
         return Buffer.from(arrayBuffer).toString('base64');
     } catch (e) {
-        console.error("Failed to fetch before photo:", url, e);
+        console.error("Failed to fetch before photo from quote server:", url, e);
         return null;
     }
 }
@@ -151,7 +154,7 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
         const filePaths = req.files.map(f => f.path);
         
         const details = {
-            jobId: req.body.jobId, // Pulled from the hidden form field
+            jobId: req.body.jobId, // Pulled from the hidden form field via URL params
             contractorName: req.body.contractorName,
             vehicleYear: req.body.vehicleYear,
             vehicleMake: req.body.vehicleMake,
