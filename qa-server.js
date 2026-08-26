@@ -167,8 +167,13 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
             labels: JSON.parse(req.body.labels || "[]")
         };
 
-        // CENTRALIZED BRAIN: Retrieve the AI Before Photos securely from the main Job Database
+        // CENTRALIZED BRAIN: Retrieve the AI Before Photos & Pricing securely from the main Job Database
         let beforePhotosUrls = [];
+        let leadClientName = "N/A";
+        let leadPrice = "N/A";
+        let leadPay = "N/A";
+        let leadAiNotes = "N/A";
+
         if (details.jobId) {
             try {
                 const leadRes = await fetch(`${CRM_API_URL}/api/internal/lead/${details.jobId}`, {
@@ -181,6 +186,11 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
                             ? JSON.parse(leadData.before_photos) 
                             : leadData.before_photos;
                     }
+                    // NEW: Capture the pricing and client data
+                    leadClientName = leadData.customer_name || "N/A";
+                    leadPrice = leadData.service_cost || "N/A";
+                    leadPay = leadData.contractor_expense || "N/A";
+                    leadAiNotes = leadData.ai_notes || "N/A";
                 }
             } catch (e) {
                 console.error("Could not fetch CRM lead data for QA:", e);
@@ -216,7 +226,14 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
             serviceLevel: details.serviceLevel,
             score: aiReport.score,
             summary: aiReport.summary,
-            analysis: formattedAnalysis
+            analysis: formattedAnalysis,
+            
+            // NEW: Save the fetched CRM data into the QA database
+            clientName: leadClientName,
+            price: leadPrice,
+            contractorPay: leadPay,
+            aiNotes: leadAiNotes,
+            beforePhotos: beforePhotosUrls
         };
 
         // Save to Database
