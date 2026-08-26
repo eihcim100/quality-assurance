@@ -129,6 +129,16 @@
                     </div>
 
                     <div>
+                        <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Detail Type</label>
+                        <select id="d-type" class="w-full p-4 rounded-2xl input-light font-bold appearance-none bg-white">
+                            <option value="" disabled selected>Select Scope of Work...</option>
+                            <option value="exterior">Exterior Only (10 Photos)</option>
+                            <option value="interior">Interior Only (20 Photos)</option>
+                            <option value="full">Full Detail (Inside & Out) (30 Photos)</option>
+                        </select>
+                    </div>
+
+                    <div>
                         <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Completed Service Level</label>
                         <select id="s-level" class="w-full p-4 rounded-2xl input-light font-bold appearance-none bg-white">
                             <option value="" disabled selected>Select Service Performed...</option>
@@ -177,7 +187,7 @@
                         </h2>
                     </div>
                     <div class="w-12 h-12 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-black text-slate-900">
-                        <span id="stage-counter">1</span><span class="text-slate-400 text-xs">/24</span>
+                        <span id="stage-counter">1</span><span class="text-slate-400 text-xs">/<span id="stage-counter-total">30</span></span>
                     </div>
                 </div>
 
@@ -247,7 +257,7 @@
                     </div>
                     
                     <h1 class="text-3xl font-black uppercase italic tracking-tight text-center text-slate-900" id="contractor-display">Contractor Name</h1>
-                    <p class="text-slate-500 font-bold uppercase tracking-widest text-sm mt-2" id="vehicle-display">Year Make Model</p>
+                    <p class="text-slate-500 font-bold uppercase tracking-widest text-sm mt-2 text-center" id="vehicle-display">Year Make Model | Type</p>
                 </div>
 
                 <div class="relative z-10 space-y-6 mb-10">
@@ -276,19 +286,42 @@
     </main>
 
     <script>
-        // Define the 24 standard mandatory shots for a comprehensive scan
-        const STAGES = [
-            "Front Exterior", "Hood", "Front Bumper / Grill",
-            "Driver Side Exterior", "Driver Front Wheel & Well", "Driver Rear Wheel & Well",
-            "Rear Exterior / Trunk Lid", "Passenger Side Exterior", "Passenger Front Wheel & Well",
-            "Passenger Rear Wheel & Well", "Roof", 
-            "Driver Front Door Panel", "Driver Seat", "Driver Floor & Pedals",
-            "Steering Wheel & Gauges", "Center Console & Cupholders", "Dashboard & Infotainment",
-            "Passenger Front Door Panel", "Passenger Seat", "Passenger Floor",
-            "Rear Seats", "Rear Floors", "Headliner / Interior Roof", "Trunk Interior / Cargo Area"
-        ];
+        // Preset shot lists depending on the service scope
+        const STAGE_PRESETS = {
+            exterior: [
+                "Front Exterior", "Hood & Grill", "Driver Side Exterior",
+                "Driver Front Wheel & Well", "Driver Rear Wheel & Well",
+                "Rear Exterior / Trunk Lid", "Passenger Side Exterior",
+                "Passenger Front Wheel & Well", "Passenger Rear Wheel & Well",
+                "Roof"
+            ],
+            interior: [
+                "Driver Front Door Panel", "Driver Seat", "Driver Floor & Pedals",
+                "Steering Wheel & Gauges", "Center Console", "Cupholders",
+                "Dashboard", "Infotainment / Vents", "Passenger Front Door Panel",
+                "Passenger Seat", "Passenger Floor", "Glovebox Area",
+                "Driver Side Rear Door Panel", "Passenger Side Rear Door Panel",
+                "Rear Seats", "Rear Floors", "Headliner / Interior Roof",
+                "Trunk Interior / Cargo Area", "Spare Tire / Hidden Compartment",
+                "Inside Windows (General)"
+            ],
+            full: [
+                "Front Exterior", "Hood", "Front Bumper / Grill",
+                "Driver Side Exterior", "Driver Front Wheel & Well", "Driver Rear Wheel & Well",
+                "Rear Exterior / Trunk Lid", "Passenger Side Exterior", "Passenger Front Wheel & Well",
+                "Passenger Rear Wheel & Well", "Roof", 
+                "Driver Front Door Panel", "Driver Seat", "Driver Floor & Pedals",
+                "Steering Wheel & Gauges", "Center Console & Cupholders", "Dashboard & Infotainment",
+                "Passenger Front Door Panel", "Passenger Seat", "Passenger Floor",
+                "Driver Side Rear Door Panel", "Passenger Side Rear Door Panel",
+                "Rear Seats", "Rear Floors", "Headliner / Interior Roof", 
+                "Trunk Interior / Cargo Area", "Spare Tire / Hidden Compartment",
+                "Interior Glass (Front)", "Interior Glass (Rear)", "Final Walkaround / Entire Vehicle"
+            ]
+        };
 
-        let capturedPhotos = new Array(STAGES.length).fill(null); // Will hold File objects
+        let STAGES = []; 
+        let capturedPhotos = []; 
         let currentIdx = 0;
 
         function showError(inputId) {
@@ -304,8 +337,8 @@
         }
 
         function startPhotoCapture() {
-            // Validate
-            const reqs = ['contractor-name', 'v-year', 'v-make', 'v-model', 'v-type', 's-level'];
+            // Validate all required inputs including the new d-type
+            const reqs = ['contractor-name', 'v-year', 'v-make', 'v-model', 'v-type', 'd-type', 's-level'];
             let valid = true;
             reqs.forEach(id => {
                 if(!document.getElementById(id).value.trim()) {
@@ -314,6 +347,15 @@
                 }
             });
             if(!valid) return;
+
+            // Setup dynamic stages based on Detail Type Selection
+            const detailType = document.getElementById('d-type').value;
+            STAGES = STAGE_PRESETS[detailType];
+            capturedPhotos = new Array(STAGES.length).fill(null);
+            currentIdx = 0;
+            
+            // Update total counter UI element
+            document.getElementById('stage-counter-total').innerText = STAGES.length;
 
             initThumbnailTrack();
             updateCameraUI();
@@ -332,7 +374,7 @@
             });
         }
 
-        // On-device compression to prevent server memory crashes with 24 images
+        // On-device compression to prevent server memory crashes with up to 30 images
         async function shrinkImage(file) {
             return new Promise((resolve) => {
                 const reader = new FileReader();
@@ -369,13 +411,11 @@
             
             document.getElementById('photo-err').classList.add('hidden');
             
-            // Show temporary loading text
             document.getElementById('upload-text').innerHTML = '<p class="font-bold text-slate-900">Compressing...</p>';
             
             const compressedFile = await shrinkImage(file);
             capturedPhotos[currentIdx] = compressedFile;
             
-            // Reset upload text structure for next time
             document.getElementById('upload-text').innerHTML = `
                 <div class="w-16 h-16 bg-white text-slate-600 rounded-full flex items-center justify-center mx-auto shadow-sm border border-slate-200 mb-4 group-hover:bg-yellow-400 group-hover:text-slate-900 transition-colors">
                     <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
@@ -404,14 +444,14 @@
                 previewImg.classList.remove('hidden');
                 uploadText.classList.add('hidden');
                 overlay.classList.remove('hidden');
-                fileInput.required = false; // Already have a photo
+                fileInput.required = false;
             } else {
                 previewImg.src = '';
                 previewImg.classList.add('hidden');
                 uploadText.classList.remove('hidden');
                 overlay.classList.add('hidden');
                 fileInput.required = true;
-                fileInput.value = ""; // Clear input
+                fileInput.value = "";
             }
 
             document.getElementById('btn-back').classList.toggle('hidden', currentIdx === 0);
@@ -446,7 +486,6 @@
                 }
             }
             
-            // Auto scroll track
             const activeThumb = document.getElementById('thumb-'+currentIdx);
             if (activeThumb) {
                 activeThumb.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
@@ -454,7 +493,6 @@
         }
 
         function jumpToPhoto(idx) {
-            // Only allow jumping back, or jumping forward if the current photo is taken
             if (idx < currentIdx || capturedPhotos[currentIdx]) {
                 currentIdx = idx;
                 updateCameraUI();
@@ -483,7 +521,6 @@
         }
 
         function messageBox(title, msg) {
-            // Custom modal instead of alert()
             const modal = document.createElement('div');
             modal.className = 'fixed inset-0 bg-slate-900/80 z-[100] flex items-center justify-center p-4 backdrop-blur-sm';
             modal.innerHTML = `
@@ -505,6 +542,10 @@
             formData.append('vehicleMake', document.getElementById('v-make').value);
             formData.append('vehicleModel', document.getElementById('v-model').value);
             formData.append('vehicleType', document.getElementById('v-type').value);
+            
+            const dTypeEl = document.getElementById('d-type');
+            formData.append('detailType', dTypeEl.options[dTypeEl.selectedIndex].text);
+            
             formData.append('serviceLevel', document.getElementById('s-level').value);
             formData.append('biohazard', document.getElementById('chk-biohazard').checked);
             formData.append('smoke', document.getElementById('chk-smoke').checked);
@@ -529,14 +570,13 @@
             } catch (error) {
                 console.error(error);
                 messageBox("Network Error", "Failed to connect to the QA analysis server. Please check your connection and try again.");
-                showStep(2); // Go back to photos
+                showStep(2); 
             }
         }
 
         function renderFinalReport(data) {
             showStep(4);
             
-            // Format score to 1 decimal place
             const rawScore = parseFloat(data.score) || 0;
             const formattedScore = rawScore.toFixed(1);
             
@@ -545,7 +585,6 @@
             
             scoreEl.innerText = formattedScore;
 
-            // Color coding based on Independent Contractor logic
             if (rawScore >= 9.0) {
                 scoreEl.className = "text-7xl font-black tracking-tighter text-green-600";
                 scoreCircle.className = "w-48 h-48 rounded-full flex items-center justify-center border-[12px] shadow-xl bg-white mb-6 border-green-500";
@@ -558,18 +597,19 @@
             }
 
             document.getElementById('contractor-display').innerText = document.getElementById('contractor-name').value;
+            
+            const dTypeEl = document.getElementById('d-type');
+            const selectedDetailScope = dTypeEl.options[dTypeEl.selectedIndex].text;
             document.getElementById('vehicle-display').innerText = 
-                `${document.getElementById('v-year').value} ${document.getElementById('v-make').value} ${document.getElementById('v-model').value} | ${document.getElementById('s-level').value}`;
+                `${document.getElementById('v-year').value} ${document.getElementById('v-make').value} ${document.getElementById('v-model').value} \n ${selectedDetailScope} | ${document.getElementById('s-level').value}`;
             
             document.getElementById('summary-display').innerText = data.summary;
 
             const container = document.getElementById('analysis-container');
             container.innerHTML = "";
 
-            // Render breakdowns
             if(data.analysis && data.analysis.length > 0) {
                 data.analysis.forEach((item, i) => {
-                    // Match to local blob for display
                     const imgSrc = URL.createObjectURL(capturedPhotos[i]);
                     
                     container.innerHTML += `
