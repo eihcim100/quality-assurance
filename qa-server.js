@@ -39,6 +39,7 @@ const storage = multer.diskStorage({
     filename: (req, file, cb) => { cb(null, Date.now() + '-' + file.originalname.replace(/[^a-zA-Z0-9.]/g, '')); }
 });
 
+// Setting max limit to 30 files for the Full Detail scope
 const upload = multer({ storage: storage, limits: { fileSize: 10 * 1024 * 1024 } }); 
 
 app.use(express.json());
@@ -67,16 +68,18 @@ async function runQAAnalysis(filePaths, details) {
     CONTEXT:
     - Contractor: ${details.contractorName}
     - Vehicle: ${details.vehicleYear} ${details.vehicleMake} ${details.vehicleModel} (${details.vehicleType})
+    - Scope of Work: ${details.detailType}
     - Completed Level: ${details.serviceLevel}
     - Biohazard Remediation Performed: ${details.biohazard}
     - Smoke/Odor Remediation Performed: ${details.smoke}
     - Photo Sequence: ${details.labels.join(', ')}
 
     CONTRACTOR AGREEMENT RULES:
-    1. Premium Quality: The contractor must use high-quality chemicals. Surfaces should look treated, not greasy or dry.
-    2. "When in doubt, clean it out": No obvious dirt, streaks, mud, or un-vacuumed pet hair should remain.
-    3. Biohazard: If Biohazard is true, there must be NO TRACE of stains/bodily fluids.
-    4. Level 3 requires meticulous, flawless cleaning (cupholders, cracks, crevices). Level 1 is a basic but thorough refresh.
+    1. Scope Consideration: Judge ONLY the areas included in the scope of work (${details.detailType}).
+    2. Premium Quality: The contractor must use high-quality chemicals. Surfaces should look treated, not greasy or dry.
+    3. "When in doubt, clean it out": No obvious dirt, streaks, mud, or un-vacuumed pet hair should remain.
+    4. Biohazard: If Biohazard is true, there must be NO TRACE of stains/bodily fluids.
+    5. Level 3 requires meticulous, flawless cleaning (cupholders, cracks, crevices). Level 1 is a basic but thorough refresh.
 
     TASK:
     1. Analyze all provided images in sequence. Look closely for streaks on glass, dirt in door jambs, unvacuumed carpets, dirty wheels, etc.
@@ -124,6 +127,7 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
             vehicleMake: req.body.vehicleMake,
             vehicleModel: req.body.vehicleModel,
             vehicleType: req.body.vehicleType,
+            detailType: req.body.detailType,
             serviceLevel: req.body.serviceLevel,
             biohazard: req.body.biohazard,
             smoke: req.body.smoke,
@@ -155,6 +159,7 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
             timestamp: new Date().toLocaleString("en-US", { timeZone: "America/Chicago" }),
             contractor: details.contractorName,
             vehicle: `${details.vehicleYear} ${details.vehicleMake} ${details.vehicleModel}`,
+            detailType: details.detailType,
             serviceLevel: details.serviceLevel,
             score: aiReport.score,
             summary: aiReport.summary,
