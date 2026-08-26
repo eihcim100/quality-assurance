@@ -96,6 +96,9 @@
                 </h2>
                 
                 <div class="space-y-5">
+                    
+                    <input type="hidden" id="job-id-field" value="">
+
                     <div>
                         <label class="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Contractor Full Name</label>
                         <input id="contractor-name" type="text" placeholder="e.g. John Doe" class="w-full p-4 rounded-2xl input-light font-bold">
@@ -236,7 +239,7 @@
                 <div class="loader"></div>
             </div>
             <h2 class="text-2xl font-black uppercase tracking-widest text-slate-900 mb-2">Analyzing Quality</h2>
-            <p class="text-slate-600 font-medium max-w-md mx-auto">Running contractor compliance protocols and checking for defects, streaks, and missed areas against the Independent Contractor Agreement...</p>
+            <p class="text-slate-600 font-medium max-w-md mx-auto">Retrieving Before Photos & evaluating contractor compliance against AI baseline...</p>
             
             <div class="max-w-xs mx-auto mt-12 bg-slate-200 rounded-full h-2 overflow-hidden">
                 <div class="bg-yellow-400 h-full w-full origin-left animate-[scaleX_3s_ease-in-out_infinite]"></div>
@@ -246,7 +249,6 @@
         <div id="step-4" class="step">
             <div class="bg-white rounded-[2.5rem] p-6 sm:p-10 border border-slate-200 shadow-2xl overflow-hidden relative">
                 
-                <!-- Background decoration -->
                 <div class="absolute -top-20 -right-20 w-64 h-64 bg-yellow-400/20 rounded-full blur-3xl"></div>
 
                 <div class="relative z-10 flex flex-col items-center border-b border-slate-200 pb-8 mb-8">
@@ -286,7 +288,6 @@
     </main>
 
     <script>
-        // Preset shot lists depending on the service scope
         const STAGE_PRESETS = {
             exterior: [
                 "Front Exterior", "Hood & Grill", "Driver Side Exterior",
@@ -324,25 +325,23 @@
         let capturedPhotos = []; 
         let currentIdx = 0;
 
-        // Auto-fill form data sent from the Job Portal Database (Smart Parser)
         document.addEventListener("DOMContentLoaded", () => {
             const urlParams = new URLSearchParams(window.location.search);
 
+            let jobId = urlParams.get('job_id');
             let vYear = urlParams.get('v-year');
             let vMake = urlParams.get('v-make');
             let vModel = urlParams.get('v-model');
-            let serviceLevelString = urlParams.get('s-level'); // Received from your 'leads' database
+            let serviceLevelString = urlParams.get('s-level'); 
 
+            if (jobId) document.getElementById('job-id-field').value = jobId;
             if (vYear) document.getElementById('v-year').value = vYear;
             if (vMake) document.getElementById('v-make').value = vMake;
             if (vModel) document.getElementById('v-model').value = vModel;
             
-            // Smart Parser: Breaks down the single 'service_level' string from your database 
-            // into the two distinct QA portal fields (Detail Type & Completed Service Level)
             if (serviceLevelString) {
                 const slLower = serviceLevelString.toLowerCase();
                 
-                // 1. Guess the Detail Type (Scope)
                 const dTypeEl = document.getElementById('d-type');
                 if (slLower.includes('full') || slLower.includes('complete')) {
                     dTypeEl.value = 'full';
@@ -352,7 +351,6 @@
                     dTypeEl.value = 'exterior';
                 }
 
-                // 2. Guess the Service Level
                 const sLevelEl = document.getElementById('s-level');
                 if (slLower.includes('level 1') || slLower.includes('essential')) {
                     sLevelEl.value = 'Level 1';
@@ -411,7 +409,6 @@
             });
         }
 
-        // On-device compression to prevent server memory crashes with up to 30 images
         async function shrinkImage(file) {
             return new Promise((resolve) => {
                 const reader = new FileReader();
@@ -421,7 +418,7 @@
                     img.src = e.target.result;
                     img.onload = () => {
                         const canvas = document.createElement('canvas');
-                        const MAX_WIDTH = 1024; // Compress to max 1024px width
+                        const MAX_WIDTH = 1024;
                         let width = img.width; 
                         let height = img.height;
                         
@@ -436,7 +433,7 @@
                         ctx.drawImage(img, 0, 0, width, height);
                         canvas.toBlob((blob) => {
                             resolve(new File([blob], file.name, { type: 'image/jpeg' }));
-                        }, 'image/jpeg', 0.7); // 70% quality JPEG
+                        }, 'image/jpeg', 0.7);
                     };
                 };
             });
@@ -571,9 +568,10 @@
         }
 
         async function submitReport() {
-            showStep(3); // Loading screen
+            showStep(3); 
 
             const formData = new FormData();
+            formData.append('jobId', document.getElementById('job-id-field').value);
             formData.append('contractorName', document.getElementById('contractor-name').value);
             formData.append('vehicleYear', document.getElementById('v-year').value);
             formData.append('vehicleMake', document.getElementById('v-make').value);
@@ -593,7 +591,6 @@
             });
 
             try {
-                // Point this to your Render backend API
                 const response = await fetch('/api/qa-scan', {
                     method: 'POST',
                     body: formData
