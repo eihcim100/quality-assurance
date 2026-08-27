@@ -104,14 +104,17 @@ async function runQAAnalysis(filePaths, details, beforePhotosUrls = []) {
        - 6.0-7.9: Acceptable, but noticeable corners cut.
        - < 6.0: Poor, failed inspection.
     3. Provide an executive summary of the work. Address the contractor directly and professionally.
-    4. Provide specific feedback for EACH AFTER photo label provided in the sequence. Point out what they did well in that specific shot, or what they missed based on the original condition.
+    4. Provide specific feedback for EVERY SINGLE AFTER photo label provided in the sequence. You MUST return exactly ${details.labels.length} items in your analysis array.
 
-    RETURN ONLY STRICT JSON FORMAT:
+    RETURN ONLY STRICT JSON FORMAT EXACTLY LIKE THIS:
     {
         "score": 8.7,
-        "summary": "Great work on the interior extraction, but the wheels could use a bit more tire shine...",
+        "summary": "Great work on the interior extraction, but...",
         "analysis": [
-            {"label": "Front Exterior", "feedback": "Paint looks glossy and streak-free."}
+            {"label": "Label 1 goes here", "feedback": "Feedback for photo 1..."},
+            {"label": "Label 2 goes here", "feedback": "Feedback for photo 2..."},
+            {"label": "Label 3 goes here", "feedback": "Feedback for photo 3..."}
+            // ... You must continue and include an object for ALL labels in the Photo Sequence!
         ]
     }`;
 
@@ -202,11 +205,16 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
         // Inject image URLs into the analysis breakdown for the admin portal
         const formattedAnalysis = details.labels.map((label, index) => {
             let feedback = "No specific feedback provided by AI.";
-            if (aiReport.analysis && aiReport.analysis[index]) {
-                feedback = aiReport.analysis[index].feedback;
-            } else if (aiReport.analysis) {
-                const match = aiReport.analysis.find(a => a.label === label);
-                if (match) feedback = match.feedback;
+            
+            if (aiReport.analysis && Array.isArray(aiReport.analysis)) {
+                // Find the exact label, making it case-insensitive just to be safe
+                const match = aiReport.analysis.find(a => 
+                    a.label && a.label.toLowerCase() === label.toLowerCase()
+                );
+                
+                if (match && match.feedback) {
+                    feedback = match.feedback;
+                }
             }
 
             return {
