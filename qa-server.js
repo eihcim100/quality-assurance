@@ -73,7 +73,7 @@ async function fetchImageToB64(url) {
 }
 
 async function runQAAnalysis(filePaths, details, beforePhotosUrls = []) {
-    const model = genAI.getGenerativeModel({ model: "gemini-3.1-pro-preview" }); 
+    const model = genAI.getGenerativeModel({ model: "gemini-3.1-pro-preview" }); // KEEP THIS LINE THE SAME DO NOT CHANGE
     
     let promptParts = [];
     
@@ -87,7 +87,6 @@ async function runQAAnalysis(filePaths, details, beforePhotosUrls = []) {
     - Completed Level: ${details.serviceLevel}
     - Biohazard Remediation Performed: ${details.biohazard}
     - Smoke/Odor Remediation Performed: ${details.smoke}
-    - Photo Sequence: ${details.labels.join(', ')}
 
     CONTRACTOR AGREEMENT RULES:
     1. Scope Consideration: Judge ONLY the areas included in the scope of work (${details.detailType}).
@@ -95,16 +94,14 @@ async function runQAAnalysis(filePaths, details, beforePhotosUrls = []) {
     3. "When in doubt, clean it out": No obvious dirt, streaks, mud, or un-vacuumed pet hair should remain.
     4. Biohazard: If Biohazard is true, there must be NO TRACE of stains/bodily fluids.
     5. Level 3 requires meticulous cleaning. Level 1 is a basic refresh.
+    6. IMAGE VERIFICATION: If the submitted photo clearly does not match its requested label (e.g., an exterior photo was submitted for an interior seat label), you MUST fail it immediately and explicitly state that the wrong photo was provided.
 
     TASK:
-    1. Analyze the provided photos. If "BEFORE" photos are provided, directly compare the condition of the vehicle before the detail to the "AFTER" photos completed by the contractor.
-    2. Provide an honest, strict QA score from 0.0 to 10.0 based on the transformation and final results (Use decimals, e.g., 8.4, 9.2). 
-       - 9.5-10.0: Perfect, flawless execution.
-       - 8.0-9.4: Great job, minor easily fixable issues.
-       - 6.0-7.9: Acceptable, but noticeable corners cut.
-       - < 6.0: Poor, failed inspection.
-    3. Provide an executive summary of the work. Address the contractor directly and professionally.
-    4. Provide specific feedback for EVERY SINGLE AFTER photo label provided in the sequence. You MUST return exactly ${details.labels.length} items in your analysis array.
+    1. Analyze the provided sequence of After Photos. Each photo will have its label attached to it.
+    2. If "BEFORE" photos are provided, use them to gauge the transformation.
+    3. Provide an honest, strict QA score from 0.0 to 10.0 based on the results.
+    4. Provide an executive summary of the work.
+    5. Provide specific feedback for EVERY SINGLE AFTER photo label provided. You MUST return exactly ${details.labels.length} items in your analysis array.
 
     RETURN ONLY STRICT JSON FORMAT EXACTLY LIKE THIS:
     {
@@ -112,15 +109,13 @@ async function runQAAnalysis(filePaths, details, beforePhotosUrls = []) {
         "summary": "Great work on the interior extraction, but...",
         "analysis": [
             {"label": "Label 1 goes here", "feedback": "Feedback for photo 1..."},
-            {"label": "Label 2 goes here", "feedback": "Feedback for photo 2..."},
-            {"label": "Label 3 goes here", "feedback": "Feedback for photo 3..."}
-            // ... You must continue and include an object for ALL labels in the Photo Sequence!
+            {"label": "Label 2 goes here", "feedback": "Feedback for photo 2..."}
         ]
     }`;
 
     promptParts.push(promptText);
 
-    // Interleave the Before and After Photos into the Gemini Context Array
+    // Group BEFORE photos
     if (beforePhotosUrls && beforePhotosUrls.length > 0) {
         promptParts.push("\n--- BEFORE PHOTOS (TAKEN BY CLIENT PRE-DETAIL) ---\n");
         for (let url of beforePhotosUrls) {
@@ -130,10 +125,16 @@ async function runQAAnalysis(filePaths, details, beforePhotosUrls = []) {
     }
 
     promptParts.push("\n--- AFTER PHOTOS (TAKEN BY CONTRACTOR POST-DETAIL) ---\n");
-    const afterImageParts = filePaths.map((p) => ({ 
-        inlineData: { data: Buffer.from(fs.readFileSync(p)).toString('base64'), mimeType: "image/jpeg" } 
-    }));
-    promptParts.push(...afterImageParts);
+    
+    // NEW FIX: Interleave the text label directly BEFORE the corresponding image payload
+    // This physically prevents the AI from losing track of which image is which.
+    filePaths.forEach((p, index) => {
+        const currentLabel = details.labels[index] || `Photo ${index + 1}`;
+        promptParts.push(`\nEvaluating: ${currentLabel}`);
+        promptParts.push({ 
+            inlineData: { data: Buffer.from(fs.readFileSync(p)).toString('base64'), mimeType: "image/jpeg" } 
+        });
+    });
 
     try {
         const result = await model.generateContent(promptParts);
@@ -145,7 +146,6 @@ async function runQAAnalysis(filePaths, details, beforePhotosUrls = []) {
         throw new Error("AI Analysis Failed.");
     }
 }
-
 // --- PORTAL ENDPOINTS ---
 
 app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
