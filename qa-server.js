@@ -61,12 +61,13 @@ app.use((req, res, next) => {
 });
 
 // --- DEEL API HELPER FUNCTION ---
+// --- DEEL API HELPER FUNCTION ---
 async function issueDeelBonus(contractId, amount, reason) {
     try {
         console.log(`Attempting Deel Payout... Contract: ${contractId}, Amount: $${amount}`);
         
-        // Deel API endpoint for adding an adjustment (bonus/expense)
-        const response = await fetch(`https://api.letsdeel.com/rest/v2/contracts/${contractId}/adjustments`, {
+        // CORRECTED: Endpoint for Independent Contractor 'Invoice Adjustments'
+        const response = await fetch(`https://api.letsdeel.com/rest/v2/invoice-adjustments`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${DEEL_API_KEY}`,
@@ -74,20 +75,28 @@ async function issueDeelBonus(contractId, amount, reason) {
             },
             body: JSON.stringify({
                 data: {
+                    contract_id: contractId,
                     amount: amount,
-                    currencyCode: "USD",
                     description: reason,
-                    type: "Bonus" // Adjust this string if you use a different required Deel adjustment type
+                    type: "bonus" // Must be strictly lowercase for the invoice-adjustments endpoint
                 }
             })
         });
+
+        // Safely check if Deel returned JSON or an HTML error page so it doesn't crash
+        const contentType = response.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+            const textError = await response.text();
+            console.error(`❌ DEEL API ROUTING ERROR (Not JSON):`, textError.substring(0, 150));
+            return;
+        }
 
         const data = await response.json();
         
         if (response.ok) {
             console.log(`✅ DEEL SUCCESS: Paid $${amount} for contract ${contractId}`);
         } else {
-            console.error(`❌ DEEL API REJECTED PAYMENT:`, data);
+            console.error(`❌ DEEL API REJECTED PAYMENT:`, JSON.stringify(data, null, 2));
         }
     } catch (error) {
         console.error(`❌ DEEL NETWORK ERROR:`, error.message);
