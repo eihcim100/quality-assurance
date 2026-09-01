@@ -64,11 +64,9 @@ app.use((req, res, next) => {
 async function issueDeelBonus(contractId, amount, reason) {
     try {
         console.log(`Attempting Deel Payout... Contract: ${contractId}, Amount: $${amount}`);
-        
-        // Generate today's date in YYYY-MM-DD format for Deel
         const today = new Date().toISOString().split('T')[0];
 
-        // Endpoint for Independent Contractor 'Invoice Adjustments'
+        // 1. CREATE THE BONUS
         const response = await fetch(`https://api.letsdeel.com/rest/v2/invoice-adjustments`, {
             method: 'POST',
             headers: {
@@ -81,23 +79,45 @@ async function issueDeelBonus(contractId, amount, reason) {
                     amount: amount,
                     description: reason,
                     type: "bonus", 
-                    date_submitted: today // <-- ADDED THIS REQUIRED FIELD
+                    date_submitted: today
                 }
             })
         });
 
-        // Safely check if Deel returned JSON or an HTML error page so it doesn't crash
         const contentType = response.headers.get("content-type");
         if (!contentType || !contentType.includes("application/json")) {
-            const textError = await response.text();
-            console.error(`❌ DEEL API ROUTING ERROR (Not JSON):`, textError.substring(0, 150));
+            console.error(`❌ DEEL API ROUTING ERROR:`, await response.text());
             return;
         }
 
         const data = await response.json();
         
         if (response.ok) {
-            console.log(`✅ DEEL SUCCESS: Paid $${amount} for contract ${contractId}`);
+            console.log(`✅ DEEL SUCCESS: Created $${amount} bonus.`);
+            
+            // 2. INSTANTLY AUTO-APPROVE IT
+            const adjustmentId = data.data?.id; 
+            if (adjustmentId) {
+                const approveRes = await fetch(`https://api.letsdeel.com/rest/v2/invoice-adjustments/${adjustmentId}/reviews`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${DEEL_API_KEY}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        data: {
+                            status: "approved",
+                            reason: "Auto-approved by Michie QA System"
+                        }
+                    })
+                });
+
+                if (approveRes.ok) {
+                    console.log(`✅ DEEL AUTO-APPROVE SUCCESS: Bonus is fully locked in and ready for payout!`);
+                } else {
+                    console.error(`⚠️ DEEL Auto-Approve Failed (Check Deel Dashboard settings):`, await approveRes.text());
+                }
+            }
         } else {
             console.error(`❌ DEEL API REJECTED PAYMENT:`, JSON.stringify(data, null, 2));
         }
