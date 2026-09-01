@@ -15,6 +15,10 @@ const ADMIN_API_KEY = process.env.ADMIN_API_KEY || "YOUR_ADMIN_API_KEY";
 const API_KEY = process.env.GEMINI_API_KEY || "GEMINI_API_KEY"; 
 const genAI = new GoogleGenerativeAI(API_KEY);
 
+// Deel API Configuration
+const DEEL_API_KEY = process.env.DEEL_API_KEY; 
+const DEEL_API_URL = "https://api.letsdeel.com/rest"; 
+
 // Set up public folder and persistent uploads directory
 const publicDir = path.join(__dirname, 'public');
 const uploadDir = path.join(publicDir, 'uploads');
@@ -69,6 +73,40 @@ async function fetchImageToB64(url) {
     } catch (e) {
         console.error("Failed to fetch before photo from quote server:", url, e);
         return null;
+    }
+}
+
+// Helper function to trigger instant QA bonus via Deel
+async function issueDeelBonus(contractId, amount, description) {
+    if (!DEEL_API_KEY) {
+        console.error("Deel API key is missing. Skipping bonus payout.");
+        return;
+    }
+
+    try {
+        const response = await fetch(`${DEEL_API_URL}/invoice-adjustments`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${DEEL_API_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                data: {
+                    type: "bonus",
+                    amount: amount,
+                    contract_id: contractId,
+                    description: description
+                }
+            })
+        });
+        
+        if (!response.ok) {
+            const err = await response.text();
+            throw new Error(`Deel API error: ${response.status} - ${err}`);
+        }
+        console.log(`Successfully issued $${amount} bonus to contract ${contractId}`);
+    } catch (e) {
+        console.error("Failed to trigger Deel payment:", e);
     }
 }
 
@@ -202,6 +240,33 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
 
         const aiReport = await runQAAnalysis(filePaths, details, beforePhotosUrls);
 
+        // --- DEEL AUTOMATED PAYOUT LOGIC ---
+        // Check if a report for this specific job already exists and was paid
+        const existingReport = reports.find(r => r.jobId === details.jobId);
+        let bonusPaidOut = false;
+
+        if (existingReport && existingReport.bonusPaid) {
+            console.log(`Bonus already paid for Job ${details.jobId}. Skipping Deel API call.`);
+            bonusPaidOut = true;
+        } else if (aiReport.score >= 9.0) {
+            // Note: Make sure 'deelContractId' is successfully passed from your frontend or CRM fetch
+            const deelContractId = req.body.deelContractId; 
+            const bonusAmount = 50; 
+            
+            if (deelContractId) {
+                // Do not 'await' so the frontend receives the AI report immediately
+                issueDeelBonus(
+                    deelContractId, 
+                    bonusAmount, 
+                    `QA Inspection Passed - Job: ${details.jobId} - Score: ${aiReport.score}`
+                );
+                bonusPaidOut = true;
+            } else {
+                console.warn(`Contractor scored ${aiReport.score}, but no Deel Contract ID was found.`);
+            }
+        }
+        // -------------------------------------
+
         // Inject image URLs into the analysis breakdown for the admin portal
         const formattedAnalysis = details.labels.map((label, index) => {
             let feedback = "No specific feedback provided by AI.";
@@ -227,6 +292,7 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
         // Construct Database Record
         const reportData = {
             id: Date.now().toString(),
+            jobId: details.jobId, // Ensure jobId is saved for the idempotency check
             timestamp: new Date().toLocaleString("en-US", { timeZone: "America/Chicago" }),
             contractor: details.contractorName,
             vehicle: `${details.vehicleYear} ${details.vehicleMake} ${details.vehicleModel}`,
@@ -241,7 +307,8 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
             price: leadPrice,
             contractorPay: leadPay,
             aiNotes: leadAiNotes,
-            beforePhotos: beforePhotosUrls
+            beforePhotos: beforePhotosUrls,
+            bonusPaid: bonusPaidOut // Save the payment flag
         };
 
         // Save to Database
