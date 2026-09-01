@@ -39,6 +39,9 @@ function loadReports() {
 }
 loadReports();
 
+// Memory lock to prevent spam-click duplicate payouts
+const activeProcessingJobs = new Set();
+
 const storage = multer.diskStorage({
     destination: (req, file, cb) => { cb(null, uploadDir); },
     filename: (req, file, cb) => { cb(null, Date.now() + '-' + file.originalname.replace(/[^a-zA-Z0-9.]/g, '')); }
@@ -184,6 +187,18 @@ async function runQAAnalysis(filePaths, details, beforePhotosUrls = []) {
 // --- PORTAL ENDPOINTS ---
 
 app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
+    const incomingJobId = req.body.jobId;
+
+    // 1. CHECK THE LOCK: Is this job already being scanned right now?
+    if (incomingJobId && activeProcessingJobs.has(incomingJobId)) {
+        return res.status(429).json({ error: true, message: "A scan is already in progress for this job. Please wait." });
+    }
+
+    // 2. LOCK IT: Add this job to the active list so no other requests can get in
+    if (incomingJobId) {
+        activeProcessingJobs.add(incomingJobId);
+    }
+
     try {
         if (!req.files || req.files.length === 0) {
             return res.status(400).json({ error: "No photos uploaded." });
@@ -192,7 +207,7 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
         const filePaths = req.files.map(f => f.path);
         
         const details = {
-            jobId: req.body.jobId, // Pulled from the hidden form field via URL params
+            jobId: incomingJobId, // Uses the captured ID
             contractorName: req.body.contractorName,
             vehicleYear: req.body.vehicleYear,
             vehicleMake: req.body.vehicleMake,
@@ -342,6 +357,11 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
     } catch (e) {
         console.error("QA Scan Error:", e);
         res.status(500).json({ error: true, message: e.message });
+    } finally {
+        // 3. UNLOCK IT: No matter what happens (success or crash), remove the lock when finished
+        if (incomingJobId) {
+            activeProcessingJobs.delete(incomingJobId);
+        }
     }
 });
 
