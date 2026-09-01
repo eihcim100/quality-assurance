@@ -177,6 +177,7 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
         let leadPay = "N/A";
         let leadAiNotes = "N/A";
 
+<!-- ... existing code ... -->
         if (details.jobId) {
             try {
                 const leadRes = await fetch(`${CRM_API_URL}/api/internal/lead/${details.jobId}`, {
@@ -190,10 +191,17 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
                             : leadData.before_photos;
                     }
                     // NEW: Capture the pricing and client data
-                    leadClientName = leadData.customer_name || "N/A";
-                    leadPrice = leadData.service_cost || "N/A";
-                    leadPay = leadData.contractor_expense || "N/A";
+                    leadClientName = leadData.full_name || leadData.customer_name || "N/A";
+                    leadPrice = leadData.package_price || leadData.service_cost || "N/A";
+                    
+                    // FETCH DYNAMIC PAYOUT: Supports both legacy schema and the newer aliased schema
+                    leadPay = leadData.contractor_pay || leadData.contractor_expense || "N/A";
                     leadAiNotes = leadData.ai_notes || "N/A";
+                    
+                    // SECURITY: Hydrate the contract ID directly from your database so it can't be spoofed by the frontend
+                    if (leadData.deel_contract_id) {
+                        req.body.deelContractId = leadData.deel_contract_id;
+                    }
                 }
             } catch (e) {
                 console.error("Could not fetch CRM lead data for QA:", e);
@@ -202,7 +210,47 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
 
         const aiReport = await runQAAnalysis(filePaths, details, beforePhotosUrls);
 
+        // --- DEEL AUTOMATED PAYOUT LOGIC ---
+        // SECURITY: Scan the entire history to ensure this job hasn't ALREADY been paid out successfully
+        const alreadyPaid = reports.some(r => r.jobId === details.jobId && r.bonusPaid);
+        let bonusPaidOut = false;
+
+        if (alreadyPaid) {
+            console.warn(`SECURITY: Payout already issued for Job ${details.jobId}. Blocking duplicate payment attempt.`);
+            bonusPaidOut = true; // Preserve the paid state so the frontend knows it was handled previously
+        } else if (aiReport.score >= 9.0) {
+            // Securely mapped from the CRM fetch above
+            const deelContractId = req.body.deelContractId; 
+            
+            // Extract all distinct numbers (including decimals) from the pay string and sum them up
+            // Example: "$120 + $52 BONUS" -> [120, 52] -> 172
+            let dynamicPayAmount = 0;
+            const payMatches = String(leadPay).match(/\d+(\.\d+)?/g);
+            if (payMatches) {
+                dynamicPayAmount = payMatches.reduce((sum, val) => sum + parseFloat(val), 0);
+            }
+            
+            if (deelContractId && !isNaN(dynamicPayAmount) && dynamicPayAmount > 0) {
+                // HARD CAP SAFETY RULE: Prevent any single payout >= $300
+                if (dynamicPayAmount >= 300) {
+                    console.error(`SAFETY FLAG: Auto-payout of $${dynamicPayAmount} for Job ${details.jobId} hits the $300 limit. Blocked for manual admin review.`);
+                } else {
+                    // Do not 'await' so the frontend receives the AI report immediately
+                    issueDeelBonus(
+                        deelContractId, 
+                        dynamicPayAmount, 
+                        `Job Completed: ${details.jobId} - QA Score: ${aiReport.score}`
+                    );
+                    bonusPaidOut = true;
+                }
+            } else {
+                console.warn(`Contractor scored ${aiReport.score}, but missing Deel Contract ID or valid Pay Amount (${leadPay}).`);
+            }
+        }
+        // -------------------------------------
+
         // Inject image URLs into the analysis breakdown for the admin portal
+<!-- ... existing code ... -->
         const formattedAnalysis = details.labels.map((label, index) => {
             let feedback = "No specific feedback provided by AI.";
             
