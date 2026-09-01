@@ -61,12 +61,14 @@ app.use((req, res, next) => {
 });
 
 // --- DEEL API HELPER FUNCTION ---
-// --- DEEL API HELPER FUNCTION ---
 async function issueDeelBonus(contractId, amount, reason) {
     try {
         console.log(`Attempting Deel Payout... Contract: ${contractId}, Amount: $${amount}`);
         
-        // CORRECTED: Endpoint for Independent Contractor 'Invoice Adjustments'
+        // Generate today's date in YYYY-MM-DD format for Deel
+        const today = new Date().toISOString().split('T')[0];
+
+        // Endpoint for Independent Contractor 'Invoice Adjustments'
         const response = await fetch(`https://api.letsdeel.com/rest/v2/invoice-adjustments`, {
             method: 'POST',
             headers: {
@@ -78,7 +80,8 @@ async function issueDeelBonus(contractId, amount, reason) {
                     contract_id: contractId,
                     amount: amount,
                     description: reason,
-                    type: "bonus" // Must be strictly lowercase for the invoice-adjustments endpoint
+                    type: "bonus", 
+                    date_submitted: today // <-- ADDED THIS REQUIRED FIELD
                 }
             })
         });
