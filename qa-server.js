@@ -317,11 +317,14 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
                 if (dynamicPayAmount >= 300) {
                     console.error(`SAFETY FLAG: Auto-payout of $${dynamicPayAmount} for Job ${details.jobId} hits the $300 limit. Blocked for manual admin review.`);
                 } else {
+                    // Format a highly detailed description for the Deel Invoice
+                    const deelDescription = `Job ID: ${details.jobId} | Vehicle: ${details.vehicleYear} ${details.vehicleMake} ${details.vehicleModel} | Package: ${details.detailType} (Level ${details.serviceLevel}) | QA Score: ${aiReport.score}`;
+
                     // Do not 'await' so the frontend receives the AI report immediately
                     issueDeelBonus(
                         deelContractId, 
                         dynamicPayAmount, 
-                        `Job Completed: ${details.jobId} - QA Score: ${aiReport.score}`
+                        deelDescription
                     );
                     bonusPaidOut = true;
                 }
