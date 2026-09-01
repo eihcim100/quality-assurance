@@ -268,7 +268,7 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
         if (alreadyPaid) {
             console.warn(`SECURITY: Payout already issued for Job ${details.jobId}. Blocking duplicate payment attempt.`);
             bonusPaidOut = true; // Preserve the paid state so the frontend knows it was handled previously
-        } else if (aiReport.score > 6.0) { // <-- THRESHOLD LOWERED TO > 6.0
+        } else if (aiReport.score > 1.0 ) { // <-- THRESHOLD LOWERED TO > 1.0
             // Securely mapped from the CRM fetch above
             const deelContractId = req.body.deelContractId; 
             
