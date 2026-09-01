@@ -11,6 +11,7 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "MichieAdmin2024";
 // Inter-service Communication Keys
 const CRM_API_URL = process.env.CRM_API_URL || "https://michie-detailing-backend.onrender.com";
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || "YOUR_ADMIN_API_KEY"; 
+const DEEL_API_KEY = process.env.DEEL_API_KEY || "YOUR_DEEL_API_KEY";
 
 const API_KEY = process.env.GEMINI_API_KEY || "GEMINI_API_KEY"; 
 const genAI = new GoogleGenerativeAI(API_KEY);
@@ -55,6 +56,40 @@ app.use((req, res, next) => {
     res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
     next();
 });
+
+// --- DEEL API HELPER FUNCTION ---
+async function issueDeelBonus(contractId, amount, reason) {
+    try {
+        console.log(`Attempting Deel Payout... Contract: ${contractId}, Amount: $${amount}`);
+        
+        // Deel API endpoint for adding an adjustment (bonus/expense)
+        const response = await fetch(`https://api.letsdeel.com/rest/v2/contracts/${contractId}/adjustments`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${DEEL_API_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                data: {
+                    amount: amount,
+                    currencyCode: "USD",
+                    description: reason,
+                    type: "Bonus" // Adjust this string if you use a different required Deel adjustment type
+                }
+            })
+        });
+
+        const data = await response.json();
+        
+        if (response.ok) {
+            console.log(`✅ DEEL SUCCESS: Paid $${amount} for contract ${contractId}`);
+        } else {
+            console.error(`❌ DEEL API REJECTED PAYMENT:`, data);
+        }
+    } catch (error) {
+        console.error(`❌ DEEL NETWORK ERROR:`, error.message);
+    }
+}
 
 // --- FIXED DOMAIN ROUTING FOR BEFORE PHOTOS ---
 async function fetchImageToB64(url) {
@@ -177,7 +212,6 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
         let leadPay = "N/A";
         let leadAiNotes = "N/A";
 
-<!-- ... existing code ... -->
         if (details.jobId) {
             try {
                 const leadRes = await fetch(`${CRM_API_URL}/api/internal/lead/${details.jobId}`, {
@@ -190,6 +224,7 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
                             ? JSON.parse(leadData.before_photos) 
                             : leadData.before_photos;
                     }
+                    
                     // NEW: Capture the pricing and client data
                     leadClientName = leadData.full_name || leadData.customer_name || "N/A";
                     leadPrice = leadData.package_price || leadData.service_cost || "N/A";
@@ -198,7 +233,7 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
                     leadPay = leadData.contractor_pay || leadData.contractor_expense || "N/A";
                     leadAiNotes = leadData.ai_notes || "N/A";
                     
-                    // SECURITY: Hydrate the contract ID directly from your database so it can't be spoofed by the frontend
+                    // SECURITY: Hydrate the contract ID directly from your database (LEFT JOINed in app.py)
                     if (leadData.deel_contract_id) {
                         req.body.deelContractId = leadData.deel_contract_id;
                     }
@@ -212,13 +247,13 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
 
         // --- DEEL AUTOMATED PAYOUT LOGIC ---
         // SECURITY: Scan the entire history to ensure this job hasn't ALREADY been paid out successfully
-        const alreadyPaid = reports.some(r => r.jobId === details.jobId && r.bonusPaid);
+        const alreadyPaid = reports.some(r => r.jobId === details.jobId && r.bonusPaid === true);
         let bonusPaidOut = false;
 
         if (alreadyPaid) {
             console.warn(`SECURITY: Payout already issued for Job ${details.jobId}. Blocking duplicate payment attempt.`);
             bonusPaidOut = true; // Preserve the paid state so the frontend knows it was handled previously
-        } else if (aiReport.score >= 6.0) {
+        } else if (aiReport.score > 6.0) { // <-- THRESHOLD LOWERED TO > 6.0
             // Securely mapped from the CRM fetch above
             const deelContractId = req.body.deelContractId; 
             
@@ -250,7 +285,6 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
         // -------------------------------------
 
         // Inject image URLs into the analysis breakdown for the admin portal
-<!-- ... existing code ... -->
         const formattedAnalysis = details.labels.map((label, index) => {
             let feedback = "No specific feedback provided by AI.";
             
@@ -275,6 +309,8 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
         // Construct Database Record
         const reportData = {
             id: Date.now().toString(),
+            jobId: details.jobId,           // <-- REQUIRED: Saves Job ID to prevent duplicate payments
+            bonusPaid: bonusPaidOut,        // <-- REQUIRED: Saves Payout Status to prevent duplicate payments
             timestamp: new Date().toLocaleString("en-US", { timeZone: "America/Chicago" }),
             contractor: details.contractorName,
             vehicle: `${details.vehicleYear} ${details.vehicleMake} ${details.vehicleModel}`,
