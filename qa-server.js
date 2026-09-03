@@ -83,6 +83,7 @@ async function issueDeelBonus(contractId, amount, reason) {
                     amount: amount,
                     description: reason,
                     date_submitted: today
+                    is_auto_approved: true // 👈 Add this flag to bypass manual review
                 }
             })
         });
