@@ -66,6 +66,8 @@ async function issueDeelBonus(contractId, amount, reason) {
     try {
         console.log(`Attempting Instant Deel Payout... Contract: ${contractId}, Amount: $${amount}`);
         
+        const today = new Date().toISOString().split('T')[0]; // <-- ADDED: Get today's date in YYYY-MM-DD format
+
         // 1. CREATE AN OFF-CYCLE PAYMENT (Bypasses the regular payroll calendar)
         const offCycleRes = await fetch(`https://api.letsdeel.com/rest/v2/contracts/${contractId}/off-cycle-payments`, {
             method: 'POST',
@@ -76,8 +78,8 @@ async function issueDeelBonus(contractId, amount, reason) {
             body: JSON.stringify({
                 data: {
                     amount: amount,
-                    description: reason
-                    // OMITTING 'date_submitted' forces it to process immediately
+                    description: reason,
+                    date_submitted: today // <-- ADDED: Deel strictly requires this field
                 }
             })
         });
@@ -295,7 +297,7 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
         if (alreadyPaid) {
             console.warn(`SECURITY: Payout already issued for Job ${details.jobId}. Blocking duplicate payment attempt.`);
             bonusPaidOut = true; // Preserve the paid state so the frontend knows it was handled previously
-        } else if (aiReport.score > 0.1 ) { // <-- THRESHOLD LOWERED TO > 1.0
+        } else if (aiReport.score > 1.0 ) { // <-- THRESHOLD LOWERED TO > 1.0
             // Securely mapped from the CRM fetch above
             const deelContractId = req.body.deelContractId; 
             
