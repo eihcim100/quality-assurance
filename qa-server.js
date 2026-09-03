@@ -138,15 +138,27 @@ async function fetchImageToB64(url) {
             url = 'https://quote.michieauto.com' + (url.startsWith('/') ? '' : '/') + url; 
         }
         const response = await fetch(url);
+        
+        // Prevent processing 404 HTML pages as images
+        if (!response.ok) {
+            console.error(`Failed to fetch image, received status ${response.status} for url: ${url}`);
+            return null; 
+        }
+
+        const mimeType = response.headers.get('content-type') || "image/jpeg";
         const arrayBuffer = await response.arrayBuffer();
-        return Buffer.from(arrayBuffer).toString('base64');
+        
+        return {
+            b64: Buffer.from(arrayBuffer).toString('base64'),
+            mimeType: mimeType
+        };
     } catch (e) {
         console.error("Failed to fetch before photo from quote server:", url, e);
         return null;
     }
 }
 
-async function runQAAnalysis(filePaths, details, beforePhotosUrls = []) {
+async function runQAAnalysis(filesData, details, beforePhotosUrls = []) {
     const model = genAI.getGenerativeModel({ model: "gemini-3.1-pro-preview" }); 
     
     let promptParts = [];
@@ -196,14 +208,14 @@ async function runQAAnalysis(filePaths, details, beforePhotosUrls = []) {
     if (beforePhotosUrls && beforePhotosUrls.length > 0) {
         promptParts.push("\n--- BEFORE PHOTOS (TAKEN BY CLIENT PRE-DETAIL) ---\n");
         for (let url of beforePhotosUrls) {
-            const b64 = await fetchImageToB64(url);
-            if (b64) promptParts.push({ inlineData: { data: b64, mimeType: "image/jpeg" } });
+            const imageData = await fetchImageToB64(url);
+            if (imageData) promptParts.push({ inlineData: { data: imageData.b64, mimeType: imageData.mimeType } });
         }
     }
 
     promptParts.push("\n--- AFTER PHOTOS (TAKEN BY CONTRACTOR POST-DETAIL) ---\n");
-    const afterImageParts = filePaths.map((p) => ({ 
-        inlineData: { data: Buffer.from(fs.readFileSync(p)).toString('base64'), mimeType: "image/jpeg" } 
+    const afterImageParts = filesData.map((f) => ({ 
+        inlineData: { data: Buffer.from(fs.readFileSync(f.path)).toString('base64'), mimeType: f.mimeType } 
     }));
     promptParts.push(...afterImageParts);
 
@@ -236,7 +248,7 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
             return res.status(400).json({ error: "No photos uploaded." });
         }
 
-        const filePaths = req.files.map(f => f.path);
+        const filesData = req.files.map(f => ({ path: f.path, mimeType: f.mimetype }));
         
         const details = {
             jobId: incomingJobId, 
@@ -285,7 +297,7 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
             }
         }
 
-        const aiReport = await runQAAnalysis(filePaths, details, beforePhotosUrls);
+        const aiReport = await runQAAnalysis(filesData, details, beforePhotosUrls);
 
         const alreadyPaid = reports.some(r => r.jobId === details.jobId && r.bonusPaid === true);
         let bonusPaidOut = false;
@@ -336,7 +348,7 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
             return {
                 label: label,
                 feedback: feedback,
-                img: '/uploads/' + path.basename(filePaths[index] || '')
+                img: '/uploads/' + path.basename(filesData[index]?.path || '')
             };
         });
 
