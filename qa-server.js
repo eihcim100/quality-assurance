@@ -12,6 +12,7 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "MichieAdmin2024";
 const CRM_API_URL = process.env.CRM_API_URL || "https://michie-detailing-backend.onrender.com";
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || "YOUR_ADMIN_API_KEY"; 
 const DEEL_API_KEY = process.env.DEEL_API_KEY || "YOUR_DEEL_API_KEY";
+const DEEL_PAYMENT_METHOD_ID = process.env.DEEL_PAYMENT_METHOD_ID || "YOUR_DEEL_PAYMENT_METHOD_ID"; // <-- NEW: Required for instant funding
 
 const API_KEY = process.env.GEMINI_API_KEY || "GEMINI_API_KEY"; 
 const genAI = new GoogleGenerativeAI(API_KEY);
@@ -60,14 +61,13 @@ app.use((req, res, next) => {
     next();
 });
 
-// --- DEEL API HELPER FUNCTION ---
+// --- DEEL API HELPER FUNCTION (UPDATED FOR INSTANT PAYOUT) ---
 async function issueDeelBonus(contractId, amount, reason) {
     try {
-        console.log(`Attempting Deel Payout... Contract: ${contractId}, Amount: $${amount}`);
-        const today = new Date().toISOString().split('T')[0];
-
-        // 1. CREATE THE BONUS
-        const response = await fetch(`https://api.letsdeel.com/rest/v2/invoice-adjustments`, {
+        console.log(`Attempting Instant Deel Payout... Contract: ${contractId}, Amount: $${amount}`);
+        
+        // 1. CREATE AN OFF-CYCLE PAYMENT (Bypasses the regular payroll calendar)
+        const offCycleRes = await fetch(`https://api.letsdeel.com/rest/v2/contracts/${contractId}/off-cycle-payments`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${DEEL_API_KEY}`,
@@ -75,51 +75,46 @@ async function issueDeelBonus(contractId, amount, reason) {
             },
             body: JSON.stringify({
                 data: {
-                    contract_id: contractId,
                     amount: amount,
-                    description: reason,
-                    type: "bonus", 
-                    date_submitted: today
+                    description: reason
+                    // OMITTING 'date_submitted' forces it to process immediately
                 }
             })
         });
 
-        const contentType = response.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-            console.error(`❌ DEEL API ROUTING ERROR:`, await response.text());
+        const offCycleData = await offCycleRes.json();
+        
+        if (!offCycleRes.ok) {
+            console.error(`❌ DEEL OFF-CYCLE FAILED:`, JSON.stringify(offCycleData, null, 2));
             return;
         }
 
-        const data = await response.json();
-        
-        if (response.ok) {
-            console.log(`✅ DEEL SUCCESS: Created $${amount} bonus.`);
-            
-            // 2. INSTANTLY AUTO-APPROVE IT
-            const adjustmentId = data.data?.id; 
-            if (adjustmentId) {
-                const approveRes = await fetch(`https://api.letsdeel.com/rest/v2/invoice-adjustments/${adjustmentId}/reviews`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${DEEL_API_KEY}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        data: {
-                            status: "approved",
-                            reason: "Auto-approved by Michie QA System"
-                        }
-                    })
-                });
+        console.log(`✅ DEEL SUCCESS: Created Off-Cycle Invoice.`);
+        const invoiceId = offCycleData.data?.id;
 
-                if (approveRes.ok) {
-                    console.log(`✅ DEEL AUTO-APPROVE SUCCESS: Bonus is fully locked in and ready for payout!`);
-                } else {
-                    console.error(`⚠️ DEEL Auto-Approve Failed (Check Deel Dashboard settings):`, await approveRes.text());
-                }
+        // 2. IMMEDIATELY FUND THE INVOICE (Releases the funds)
+        if (invoiceId) {
+            const fundRes = await fetch(`https://api.letsdeel.com/rest/payments/statements`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${DEEL_API_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    data: {
+                        payment_method_id: DEEL_PAYMENT_METHOD_ID, 
+                        invoices: [invoiceId]
+                    }
+                })
+            });
+
+            if (fundRes.ok) {
+                console.log(`✅ DEEL FUNDING SUCCESS: Funds have been released instantly!`);
+            } else {
+                console.error(`⚠️ DEEL Funding Failed:`, await fundRes.text());
             }
         } else {
-            console.error(`❌ DEEL API REJECTED PAYMENT:`, JSON.stringify(data, null, 2));
+             console.error(`❌ DEEL ERROR: No invoice ID returned from off-cycle payment creation.`);
         }
     } catch (error) {
         console.error(`❌ DEEL NETWORK ERROR:`, error.message);
