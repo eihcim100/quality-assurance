@@ -96,11 +96,15 @@ async function issueDeelBonus(contractId, amount, reason) {
 
         // 2. IMMEDIATELY FUND THE INVOICE (Releases the funds)
         if (invoiceId) {
+            // Generate a unique Idempotency-Key under 64 characters
+            const idempotencyKey = `fund-${invoiceId}-${Date.now()}`;
+
             const fundRes = await fetch(`https://api.letsdeel.com/rest/payments/statements`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${DEEL_API_KEY}`,
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'Idempotency-Key': idempotencyKey // <-- ADDED: Required by Deel to prevent double-charging
                 },
                 body: JSON.stringify({
                     data: {
