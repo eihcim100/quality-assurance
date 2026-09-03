@@ -12,14 +12,15 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "MichieAdmin2024";
 const CRM_API_URL = process.env.CRM_API_URL || "https://michie-detailing-backend.onrender.com";
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || "YOUR_ADMIN_API_KEY"; 
 const DEEL_API_KEY = process.env.DEEL_API_KEY || "YOUR_DEEL_API_KEY";
-const DEEL_PAYMENT_METHOD_ID = process.env.DEEL_PAYMENT_METHOD_ID || "YOUR_DEEL_PAYMENT_METHOD_ID"; // <-- NEW: Required for instant funding
 
 const API_KEY = process.env.GEMINI_API_KEY || "GEMINI_API_KEY"; 
 const genAI = new GoogleGenerativeAI(API_KEY);
 
 // Set up public folder and persistent uploads directory
 const publicDir = path.join(__dirname, 'public');
-const uploadDir = path.join(publicDir, 'uploads');
+
+// Automatically route to the persistent disk if running on Render
+const uploadDir = process.env.RENDER ? '/var/data' : path.join(publicDir, 'uploads');
 const dataFilePath = path.join(uploadDir, 'qa-reports.json');
 
 if (!fs.existsSync(uploadDir)) {
@@ -55,20 +56,22 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
+// Tell Express to serve the images from the persistent disk folder
+app.use('/uploads', express.static(uploadDir));
+
 app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
     res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
     next();
 });
 
-// --- DEEL API HELPER FUNCTION (UPDATED FOR INSTANT PAYOUT) ---
+// --- DEEL API HELPER FUNCTION ---
 async function issueDeelBonus(contractId, amount, reason) {
     try {
         console.log(`Attempting Instant Deel Payout... Contract: ${contractId}, Amount: $${amount}`);
-        
-        const today = new Date().toISOString().split('T')[0]; // <-- ADDED: Get today's date in YYYY-MM-DD format
+        const today = new Date().toISOString().split('T')[0];
 
-        // 1. CREATE AN OFF-CYCLE PAYMENT (Bypasses the regular payroll calendar)
+        // 1. CREATE AN OFF-CYCLE PAYMENT
         const offCycleRes = await fetch(`https://api.letsdeel.com/rest/v2/contracts/${contractId}/off-cycle-payments`, {
             method: 'POST',
             headers: {
@@ -79,7 +82,7 @@ async function issueDeelBonus(contractId, amount, reason) {
                 data: {
                     amount: amount,
                     description: reason,
-                    date_submitted: today // <-- ADDED: Deel strictly requires this field
+                    date_submitted: today
                 }
             })
         });
@@ -94,25 +97,24 @@ async function issueDeelBonus(contractId, amount, reason) {
         console.log(`✅ DEEL SUCCESS: Created Off-Cycle Invoice.`);
         const invoiceId = offCycleData.data?.id;
 
-        // 2. IMMEDIATELY FUND THE INVOICE (Releases the funds)
+        // 2. IMMEDIATELY FUND THE INVOICE
         if (invoiceId) {
-            // Generate a unique Idempotency-Key under 64 characters
             const idempotencyKey = `fund-${invoiceId}-${Date.now()}`;
-
+            
             const fundRes = await fetch(`https://api.letsdeel.com/rest/payments/statements`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${DEEL_API_KEY}`,
                     'Content-Type': 'application/json',
-                    'Idempotency-Key': idempotencyKey // <-- ADDED: Required by Deel to prevent double-charging
+                    'Idempotency-Key': idempotencyKey
                 },
                 body: JSON.stringify({
                     data: {
-                        invoice_ids: [String(invoiceId)], 
                         payment: {
-                            country: "US", // Mandatory: The country of the payment method
-                            currency: "USD" // Mandatory: The currency to process the payment in
-                        }
+                            country: "US",
+                            currency: "USD"
+                        },
+                        invoice_ids: [invoiceId]
                     }
                 })
             });
@@ -122,8 +124,6 @@ async function issueDeelBonus(contractId, amount, reason) {
             } else {
                 console.error(`⚠️ DEEL Funding Failed:`, await fundRes.text());
             }
-        } else {
-             console.error(`❌ DEEL ERROR: No invoice ID returned from off-cycle payment creation.`);
         }
     } catch (error) {
         console.error(`❌ DEEL NETWORK ERROR:`, error.message);
@@ -133,7 +133,6 @@ async function issueDeelBonus(contractId, amount, reason) {
 // --- FIXED DOMAIN ROUTING FOR BEFORE PHOTOS ---
 async function fetchImageToB64(url) {
     try {
-        // Explicitly route to quote.michieauto.com where the images are hosted
         if (!url.startsWith('http://') && !url.startsWith('https://')) { 
             url = 'https://quote.michieauto.com' + (url.startsWith('/') ? '' : '/') + url; 
         }
@@ -188,13 +187,11 @@ async function runQAAnalysis(filePaths, details, beforePhotosUrls = []) {
             {"label": "Label 1 goes here", "feedback": "Feedback for photo 1..."},
             {"label": "Label 2 goes here", "feedback": "Feedback for photo 2..."},
             {"label": "Label 3 goes here", "feedback": "Feedback for photo 3..."}
-            // ... You must continue and include an object for ALL labels in the Photo Sequence!
         ]
     }`;
 
     promptParts.push(promptText);
 
-    // Interleave the Before and After Photos into the Gemini Context Array
     if (beforePhotosUrls && beforePhotosUrls.length > 0) {
         promptParts.push("\n--- BEFORE PHOTOS (TAKEN BY CLIENT PRE-DETAIL) ---\n");
         for (let url of beforePhotosUrls) {
@@ -225,12 +222,10 @@ async function runQAAnalysis(filePaths, details, beforePhotosUrls = []) {
 app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
     const incomingJobId = req.body.jobId;
 
-    // 1. CHECK THE LOCK: Is this job already being scanned right now?
     if (incomingJobId && activeProcessingJobs.has(incomingJobId)) {
         return res.status(429).json({ error: true, message: "A scan is already in progress for this job. Please wait." });
     }
 
-    // 2. LOCK IT: Add this job to the active list so no other requests can get in
     if (incomingJobId) {
         activeProcessingJobs.add(incomingJobId);
     }
@@ -243,7 +238,7 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
         const filePaths = req.files.map(f => f.path);
         
         const details = {
-            jobId: incomingJobId, // Uses the captured ID
+            jobId: incomingJobId, 
             contractorName: req.body.contractorName,
             vehicleYear: req.body.vehicleYear,
             vehicleMake: req.body.vehicleMake,
@@ -256,7 +251,6 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
             labels: JSON.parse(req.body.labels || "[]")
         };
 
-        // CENTRALIZED BRAIN: Retrieve the AI Before Photos & Pricing securely from the main Job Database
         let beforePhotosUrls = [];
         let leadClientName = "N/A";
         let leadPrice = "N/A";
@@ -276,15 +270,11 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
                             : leadData.before_photos;
                     }
                     
-                    // NEW: Capture the pricing and client data
                     leadClientName = leadData.full_name || leadData.customer_name || "N/A";
                     leadPrice = leadData.package_price || leadData.service_cost || "N/A";
-                    
-                    // FETCH DYNAMIC PAYOUT: Supports both legacy schema and the newer aliased schema
                     leadPay = leadData.contractor_pay || leadData.contractor_expense || "N/A";
                     leadAiNotes = leadData.ai_notes || "N/A";
                     
-                    // SECURITY: Hydrate the contract ID directly from your database (LEFT JOINed in app.py)
                     if (leadData.deel_contract_id) {
                         req.body.deelContractId = leadData.deel_contract_id;
                     }
@@ -296,20 +286,15 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
 
         const aiReport = await runQAAnalysis(filePaths, details, beforePhotosUrls);
 
-        // --- DEEL AUTOMATED PAYOUT LOGIC ---
-        // SECURITY: Scan the entire history to ensure this job hasn't ALREADY been paid out successfully
         const alreadyPaid = reports.some(r => r.jobId === details.jobId && r.bonusPaid === true);
         let bonusPaidOut = false;
 
         if (alreadyPaid) {
             console.warn(`SECURITY: Payout already issued for Job ${details.jobId}. Blocking duplicate payment attempt.`);
-            bonusPaidOut = true; // Preserve the paid state so the frontend knows it was handled previously
-        } else if (aiReport.score > 1.0 ) { // <-- THRESHOLD LOWERED TO > 1.0
-            // Securely mapped from the CRM fetch above
+            bonusPaidOut = true; 
+        } else if (aiReport.score > 1.0 ) { 
             const deelContractId = req.body.deelContractId; 
             
-            // Extract all distinct numbers (including decimals) from the pay string and sum them up
-            // Example: "$120 + $52 BONUS" -> [120, 52] -> 172
             let dynamicPayAmount = 0;
             const payMatches = String(leadPay).match(/\d+(\.\d+)?/g);
             if (payMatches) {
@@ -317,14 +302,11 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
             }
             
             if (deelContractId && !isNaN(dynamicPayAmount) && dynamicPayAmount > 0) {
-                // HARD CAP SAFETY RULE: Prevent any single payout >= $300
                 if (dynamicPayAmount >= 300) {
                     console.error(`SAFETY FLAG: Auto-payout of $${dynamicPayAmount} for Job ${details.jobId} hits the $300 limit. Blocked for manual admin review.`);
                 } else {
-                    // Format a highly detailed description for the Deel Invoice
                     const deelDescription = `Job ID: ${details.jobId} | Vehicle: ${details.vehicleYear} ${details.vehicleMake} ${details.vehicleModel} | Package: ${details.detailType} (Level ${details.serviceLevel}) | QA Score: ${aiReport.score}`;
 
-                    // Do not 'await' so the frontend receives the AI report immediately
                     issueDeelBonus(
                         deelContractId, 
                         dynamicPayAmount, 
@@ -336,14 +318,11 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
                 console.warn(`Contractor scored ${aiReport.score}, but missing Deel Contract ID or valid Pay Amount (${leadPay}).`);
             }
         }
-        // -------------------------------------
 
-        // Inject image URLs into the analysis breakdown for the admin portal
         const formattedAnalysis = details.labels.map((label, index) => {
             let feedback = "No specific feedback provided by AI.";
             
             if (aiReport.analysis && Array.isArray(aiReport.analysis)) {
-                // Find the exact label, making it case-insensitive just to be safe
                 const match = aiReport.analysis.find(a => 
                     a.label && a.label.toLowerCase() === label.toLowerCase()
                 );
@@ -360,11 +339,10 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
             };
         });
 
-        // Construct Database Record
         const reportData = {
             id: Date.now().toString(),
-            jobId: details.jobId,           // <-- REQUIRED: Saves Job ID to prevent duplicate payments
-            bonusPaid: bonusPaidOut,        // <-- REQUIRED: Saves Payout Status to prevent duplicate payments
+            jobId: details.jobId,
+            bonusPaid: bonusPaidOut,
             timestamp: new Date().toLocaleString("en-US", { timeZone: "America/Chicago" }),
             contractor: details.contractorName,
             vehicle: `${details.vehicleYear} ${details.vehicleMake} ${details.vehicleModel}`,
@@ -373,8 +351,6 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
             score: aiReport.score,
             summary: aiReport.summary,
             analysis: formattedAnalysis,
-            
-            // NEW: Save the fetched CRM data into the QA database
             clientName: leadClientName,
             price: leadPrice,
             contractorPay: leadPay,
@@ -382,11 +358,9 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
             beforePhotos: beforePhotosUrls
         };
 
-        // Save to Database
         reports.unshift(reportData);
         fs.writeFileSync(dataFilePath, JSON.stringify(reports));
 
-        // Return the clean data to the contractor frontend
         res.json({
             score: aiReport.score,
             summary: aiReport.summary,
@@ -397,7 +371,6 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
         console.error("QA Scan Error:", e);
         res.status(500).json({ error: true, message: e.message });
     } finally {
-        // 3. UNLOCK IT: No matter what happens (success or crash), remove the lock when finished
         if (incomingJobId) {
             activeProcessingJobs.delete(incomingJobId);
         }
@@ -419,11 +392,12 @@ app.delete('/admin/reports/:id', (req, res) => {
     const id = req.params.id;
     const report = reports.find(r => r.id === id);
     
-    // Delete the saved images from the hard drive
+    // Delete the saved images from the hard drive (updated to target the persistent disk)
     if (report && report.analysis) {
         report.analysis.forEach(item => {
             if (item.img) {
-                const filePath = path.join(publicDir, item.img);
+                const fileName = path.basename(item.img);
+                const filePath = path.join(uploadDir, fileName);
                 if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
             }
         });
