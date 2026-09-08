@@ -12,9 +12,13 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "MichieAdmin2024";
 const CRM_API_URL = process.env.CRM_API_URL || "https://michie-detailing-backend.onrender.com";
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || "YOUR_ADMIN_API_KEY"; 
 const DEEL_API_KEY = process.env.DEEL_API_KEY || "YOUR_DEEL_API_KEY";
+const DEEL_PAYMENT_METHOD_ID = process.env.DEEL_PAYMENT_METHOD_ID || "YOUR_DEBIT_CARD_METHOD_ID"; // 👈 Add this to Render Env Vars
 
 const API_KEY = process.env.GEMINI_API_KEY || "GEMINI_API_KEY"; 
 const genAI = new GoogleGenerativeAI(API_KEY);
+
+// Helper to delay execution (prevents COR invoice race condition)
+const delay = ms => new Promise(res => setTimeout(res, ms));
 
 // Set up public folder and persistent uploads directory
 const publicDir = path.join(__dirname, 'public');
@@ -95,11 +99,14 @@ async function issueDeelBonus(contractId, amount, reason) {
             return;
         }
 
-        console.log(`✅ DEEL SUCCESS: Created Off-Cycle Invoice.`);
-        const invoiceId = offCycleData.data?.id;
+        // Safely check for invoice_id first, falling back to id if it maps directly
+        const invoiceId = offCycleData.data?.invoice_id || offCycleData.data?.id;
 
         // 2. IMMEDIATELY FUND THE INVOICE
         if (invoiceId) {
+            console.log(`✅ DEEL SUCCESS: Created Off-Cycle Item. Waiting 5 seconds for COR Invoice generation...`);
+            await delay(5000); // 👈 5-second buffer to let Deel generate the COR invoice
+
             const idempotencyKey = `fund-${invoiceId}-${Date.now()}`;
             
             const fundRes = await fetch(`https://api.letsdeel.com/rest/payments/statements`, {
@@ -112,8 +119,7 @@ async function issueDeelBonus(contractId, amount, reason) {
                 body: JSON.stringify({
                     data: {
                         payment: {
-                            country: "US",
-                            currency: "USD"
+                            payment_method_id: DEEL_PAYMENT_METHOD_ID // 👈 Forces the debit card
                         },
                         invoice_ids: [invoiceId]
                     }
