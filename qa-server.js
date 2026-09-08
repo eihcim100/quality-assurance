@@ -110,32 +110,22 @@ async function issueDeelBonus(contractId, amount, reason) {
             const idempotencyKey = `fund-${invoiceId}-${Date.now()}`;
             
             const fundRes = await fetch(`https://api.letsdeel.com/rest/payments/statements`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${DEEL_API_KEY}`,
-                    'Content-Type': 'application/json',
-                    'Idempotency-Key': idempotencyKey
-                },
-                body: JSON.stringify({
-                    data: {
-                        payment: {
-                            payment_method_id: DEEL_PAYMENT_METHOD_ID // 👈 Forces the debit card
-                        },
-                        invoice_ids: [invoiceId]
-                    }
-                })
-            });
-
-            if (fundRes.ok) {
-                console.log(`✅ DEEL FUNDING SUCCESS: Funds have been released instantly!`);
-            } else {
-                console.error(`⚠️ DEEL Funding Failed:`, await fundRes.text());
-            }
+    method: 'POST',
+    headers: {
+        'Authorization': `Bearer ${DEEL_API_KEY}`,
+        'Content-Type': 'application/json',
+        'Idempotency-Key': idempotencyKey
+    },
+    body: JSON.stringify({
+        data: {
+            payment: {
+                country: "US",     // 👈 Must be exactly this
+                currency: "USD"    // 👈 Must be exactly this
+            },
+            invoice_ids: [invoiceId]
         }
-    } catch (error) {
-        console.error(`❌ DEEL NETWORK ERROR:`, error.message);
-    }
-}
+    })
+});
 
 // --- FIXED DOMAIN ROUTING FOR BEFORE PHOTOS ---
 async function fetchImageToB64(url) {
