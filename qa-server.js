@@ -20,12 +20,24 @@ const genAI = new GoogleGenerativeAI(API_KEY);
 const publicDir = path.join(__dirname, 'public');
 
 // Automatically route to the persistent disk if running on Render
-const uploadDir = process.env.RENDER ? '/var/data' : path.join(publicDir, 'uploads');
-const dataFilePath = path.join(uploadDir, 'qa-reports.json');
+let uploadDir = process.env.RENDER ? '/var/data' : path.join(publicDir, 'uploads');
 
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
+// Ensure upload directory exists, with fallback for missing Render Disk
+try {
+    if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+    }
+} catch (err) {
+    if (err.code === 'EACCES') {
+        console.warn(`\n⚠️ RENDER DISK MISSING: Permission denied creating '${uploadDir}'.\nTo fix disappearing images:\n1. Go to Render Dashboard > Your Service > Disks\n2. Add a disk with Mount Path: /var/data\nFalling back to temporary local storage...\n`);
+        uploadDir = path.join(publicDir, 'uploads');
+        if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+    } else {
+        console.error("Directory creation error:", err);
+    }
 }
+
+const dataFilePath = path.join(uploadDir, 'qa-reports.json');
 
 // Load database into memory
 let reports = [];
