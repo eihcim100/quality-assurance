@@ -277,16 +277,27 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
                 });
                 if (leadRes.ok) {
                     const leadData = await leadRes.json();
+                    
+                    // NEW: Extract photos whether they are an array of strings or an array of nested breakdown objects
+                    let rawPhotos = [];
                     if (leadData.before_photos) {
-                        beforePhotosUrls = typeof leadData.before_photos === 'string' 
+                        rawPhotos = typeof leadData.before_photos === 'string' 
                             ? JSON.parse(leadData.before_photos) 
                             : leadData.before_photos;
+                    } else if (leadData.report && leadData.report.breakdown) {
+                        rawPhotos = leadData.report.breakdown;
+                    }
+
+                    if (Array.isArray(rawPhotos)) {
+                        beforePhotosUrls = rawPhotos.map(item => (typeof item === 'object' && item.img) ? item.img : item).filter(Boolean);
                     }
                     
                     leadClientName = leadData.full_name || leadData.customer_name || "N/A";
                     leadPrice = leadData.package_price || leadData.service_cost || "N/A";
                     leadPay = leadData.contractor_pay || leadData.contractor_expense || "N/A";
-                    leadAiNotes = leadData.ai_notes || "N/A";
+                    
+                    // NEW: Prioritize detailer_notes map to match the quote server output
+                    leadAiNotes = leadData.detailer_notes || leadData.ai_notes || (leadData.report && leadData.report.detailer_notes) || "N/A";
                     
                     if (leadData.deel_contract_id) {
                         req.body.deelContractId = leadData.deel_contract_id;
