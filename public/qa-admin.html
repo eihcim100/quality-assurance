@@ -106,16 +106,23 @@
 
         async function login() {
             const pass = document.getElementById('admin-pass').value;
-            const res = await fetch('/admin/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password: pass })
-            });
-            if (res.ok) {
-                document.getElementById('login-screen').classList.add('hidden');
-                document.getElementById('dashboard-content').classList.remove('hidden');
-                fetchReports();
-            } else {
+            try {
+                const res = await fetch('/admin/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: pass })
+                });
+                if (res.ok) {
+                    document.getElementById('login-screen').classList.add('hidden');
+                    document.getElementById('dashboard-content').classList.remove('hidden');
+                    fetchReports();
+                } else {
+                    document.getElementById('login-err').classList.remove('hidden');
+                }
+            } catch(e) {
+                console.error("Login request failed", e);
+                // Simple error handling in case server is unreachable
+                document.getElementById('login-err').innerText = "Connection Error";
                 document.getElementById('login-err').classList.remove('hidden');
             }
         }
@@ -167,9 +174,6 @@
                         </td>
                         <td class="p-5 text-right space-x-2 whitespace-nowrap">
                             <button onclick="viewReport('${report.id}')" class="bg-yellow-400 text-slate-900 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-yellow-500 transition-colors">Review</button>
-                            <button onclick="deleteReport('${report.id}')" class="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 rounded-xl inline-block align-middle transition-colors">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                            </button>
                         </td>
                     </tr>
                 `;
@@ -275,17 +279,6 @@
             
             modal.classList.remove('hidden');
             document.body.style.overflow = 'hidden'; 
-        }
-
-        async function deleteReport(id) {
-            if (!confirm("Are you sure? This will permanently delete the report and all associated photos to save server space.")) return;
-            
-            try {
-                const res = await fetch(`/admin/reports/${id}`, { method: 'DELETE' });
-                if (res.ok) fetchReports();
-            } catch(e) {
-                alert("Failed to delete report.");
-            }
         }
 
         function closeModal() { 
