@@ -296,7 +296,7 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
                 if (leadRes.ok) {
                     const leadData = await leadRes.json();
                     
-                    // NEW: Extract photos whether they are an array of strings or an array of nested breakdown objects
+                    // Extract photos whether they are an array of strings or an array of nested breakdown objects
                     let rawPhotos = [];
                     if (leadData.before_photos) {
                         rawPhotos = typeof leadData.before_photos === 'string' 
@@ -315,7 +315,7 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
                     leadPrice = leadData.package_price || leadData.service_cost || "N/A";
                     leadPay = leadData.contractor_pay || leadData.contractor_expense || "N/A";
                     
-                    // NEW: Prioritize detailer_notes map to match the quote server output
+                    // Prioritize detailer_notes map to match the quote server output
                     leadAiNotes = leadData.detailer_notes || leadData.ai_notes || (leadData.report && leadData.report.detailer_notes) || "N/A";
                     
                     if (leadData.deel_contract_id) {
@@ -405,10 +405,10 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
         fs.writeFileSync(dataFilePath, JSON.stringify(reports));
 
         // --- RETELL AI OUTBOUND CALL TRIGGER ---
-        // Fire asynchronously to avoid blocking the response to the user
-        // ADDED CONDITION: aiReport.score > 7.9
+        // Fire asynchronously to avoid blocking the response to the user.
+        // Condition: Call ONLY fires if the detailer scores strictly above 7.9
         if (aiReport.score > 7.9 && leadClientPhone !== "N/A" && RETELL_QA_AGENT_ID !== "YOUR_QA_AGENT_ID") {
-            console.log(`Triggering Retell Post-Inspection Call to ${leadClientPhone}`);
+            console.log(`Triggering Retell Post-Inspection Call to ${leadClientPhone} (Score: ${aiReport.score})`);
             fetch(`${RETELL_SERVICE_URL}/trigger-inspection-call`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -416,9 +416,15 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
                     customer_name: leadClientName,
                     phone: leadClientPhone,
                     vehicle: `${details.vehicleYear} ${details.vehicleMake} ${details.vehicleModel}`,
-                    agent_id: RETELL_QA_AGENT_ID
+                    agent_id: RETELL_QA_AGENT_ID,
+                    contractor_name: details.contractorName,
+                    service_level: details.serviceLevel,
+                    detail_type: details.detailType,
+                    qa_score: aiReport.score
                 })
             }).catch(err => console.error("Failed to reach Python Retell service:", err));
+        } else if (aiReport.score <= 7.9) {
+            console.log(`Skipping Post-Inspection call. Score (${aiReport.score}) did not meet the > 7.9 threshold.`);
         }
 
         res.json({
