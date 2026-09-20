@@ -238,8 +238,7 @@ async function runQAAnalysis(filesData, details, beforePhotosUrls = []) {
     try {
         const result = await model.generateContent(promptParts);
         const response = await result.response;
-        let text = response.text().replace(/
-```json/g, "").replace(/```/g, "").trim();
+        let text = response.text().replace(/```json/g, "").replace(/```/g, "").trim();
         return JSON.parse(text);
     } catch (error) {
         console.error("Gemini Parsing Error:", error);
