@@ -313,14 +313,6 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
                     
                     leadClientName = leadData.full_name || leadData.customer_name || "N/A";
                     leadClientPhone = leadData.phone || leadData.customer_phone || leadData.phone_number || "N/A";
-                    // --- FORMAT TO E.164 BEFORE SENDING TO RETELL ---
-                    if (leadClientPhone !== "N/A") {
-                        const cleanedDigits = String(leadClientPhone).replace(/\D/g, '');
-                        if (cleanedDigits.length >= 10) {
-                            leadClientPhone = '+1' + cleanedDigits.slice(-10);
-                        }
-                    }
-                    // ------------------------------------------------
                     leadPrice = leadData.package_price || leadData.service_cost || "N/A";
                     leadPay = leadData.contractor_pay || leadData.contractor_expense || "N/A";
                     
