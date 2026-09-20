@@ -579,10 +579,6 @@
             formData.append('vehicleType', document.getElementById('v-type').value);
             
             const dTypeEl = document.getElementById('d-type');
-            const rawDetailText = dTypeEl.options[dTypeEl.selectedIndex].text;
-            // This strips out anything in parentheses like "(10 Photos)", "(20 Photos)", or "(30 Photos)"
-            const cleanDetailType = rawDetailText.replace(/\s*\(\d+\s*photos?\)/i, '').trim();
-            formData.append('detailType', cleanDetailType);
             formData.append('detailType', dTypeEl.options[dTypeEl.selectedIndex].text);
             
             formData.append('serviceLevel', document.getElementById('s-level').value);
