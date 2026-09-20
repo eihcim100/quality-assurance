@@ -266,7 +266,22 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
         }
 
         const filesData = req.files.map(f => ({ path: f.path, mimeType: f.mimetype }));
-        
+        // BACKEND SANITIZATION: Clean up package/detail strings to remove any photo count tags like "(10 Photos)"
+        const rawDetailText = req.body.detailType || "";
+        const cleanDetailType = rawDetailText.replace(/\s*\(\d+\s*photos?\)/i, '').trim();
+        const details = {
+            jobId: incomingJobId, 
+            contractorName: req.body.contractorName,
+            vehicleYear: req.body.vehicleYear,
+            vehicleMake: req.body.vehicleMake,
+            vehicleModel: req.body.vehicleModel,
+            vehicleType: req.body.vehicleType,
+            detailType: cleanDetailType, // 👈 Cleaned string passed here
+            serviceLevel: req.body.serviceLevel,
+            biohazard: req.body.biohazard,
+            smoke: req.body.smoke,
+            labels: JSON.parse(req.body.labels || "[]")
+        };
         const details = {
             jobId: incomingJobId, 
             contractorName: req.body.contractorName,
