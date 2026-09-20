@@ -406,8 +406,8 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
 
         // --- RETELL AI OUTBOUND CALL TRIGGER ---
         // Fire asynchronously to avoid blocking the response to the user.
-        // Condition: Call ONLY fires if the detailer scores strictly above 7.9
-        if (aiReport.score > 7.9 && leadClientPhone !== "N/A" && RETELL_QA_AGENT_ID !== "YOUR_QA_AGENT_ID") {
+        // Condition: Call ONLY fires if the detailer scores strictly above 7.9 (FOR TESTING I SET TO -1.0)
+        if (aiReport.score > -1.0 && leadClientPhone !== "N/A" && RETELL_QA_AGENT_ID !== "YOUR_QA_AGENT_ID") {
             console.log(`Triggering Retell Post-Inspection Call to ${leadClientPhone} (Score: ${aiReport.score})`);
             fetch(`${RETELL_SERVICE_URL}/trigger-inspection-call`, {
                 method: 'POST',
