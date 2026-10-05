@@ -396,6 +396,7 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
             summary: aiReport.summary,
             analysis: formattedAnalysis,
             clientName: leadClientName,
+            clientPhone: leadClientPhone, // <--- ADD THIS NEW LINE RIGHT HERE
             price: leadPrice,
             contractorPay: leadPay,
             aiNotes: leadAiNotes,
