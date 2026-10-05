@@ -452,9 +452,14 @@ app.post('/admin/login', (req, res) => {
 });
 
 app.get('/admin/reports', (req, res) => {
-    res.json(reports);
+    const authHeader = req.headers.authorization;
+    // Check if the request includes the Bearer token matching the admin password
+    if (authHeader === `Bearer ${ADMIN_PASSWORD}`) {
+        res.json(reports);
+    } else {
+        res.status(401).json({ error: "Unauthorized access" });
+    }
 });
-
 app.delete('/admin/reports/:id', (req, res) => {
     const id = req.params.id;
     const report = reports.find(r => r.id === id);
