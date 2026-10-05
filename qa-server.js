@@ -1,5 +1,5 @@
 const express = require('express');
-const cors = require('cors'); origins ['https://jobs.michieauto.com', 'http://127.0.0.1:5500', 'http://localhost:5500'], methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization', 'X-Admin-API-Key']
+const cors = require('cors'); origins ['https://jobs.michieauto.com', 'http://127.0.0.1:5500', 'http://localhost:5500'], methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization', 'X-Admin-API-Key'];
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
