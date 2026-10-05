@@ -1,5 +1,8 @@
 const express = require('express');
 const cors = require('cors'); // Add this
+origin: ['https://jobs.michieauto.com', 'http://127.0.0.1:5500', 'http://localhost:5500'],
+methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+allowedHeaders: ['Content-Type', 'Authorization', 'X-Admin-API-Key']
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -77,10 +80,6 @@ app.use(express.static('public'));
 app.use('/uploads', express.static(uploadDir));
 
 // Allow CORS for the admin panel
-app.use(cors({
-    origin: ['https://jobs.michieauto.com', 'http://127.0.0.1:5500', 'http://localhost:5500'],
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Admin-API-Key']
 }));
 
 // --- DEEL API HELPER FUNCTION ---
