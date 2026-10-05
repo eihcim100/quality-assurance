@@ -97,45 +97,48 @@
     <script>
         const QUOTE_PHOTO_HOST = 'https://quote.michieauto.com';
         let allReports = [];
+let currentAdminPassword = ""; // <--- NEW: Memory to hold the password
 
-        function formatPhotoUrl(url) {
-            if (!url) return '';
-            if (url.startsWith('http://') || url.startsWith('https://')) return url;
-            return QUOTE_PHOTO_HOST + (url.startsWith('/') ? '' : '/') + url;
+async function login() {
+    const pass = document.getElementById('admin-pass').value;
+    try {
+        const res = await fetch('/admin/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: pass })
+        });
+        if (res.ok) {
+            currentAdminPassword = pass; // <--- NEW: Save the password for the next step!
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('dashboard-content').classList.remove('hidden');
+            fetchReports();
+        } else {
+            document.getElementById('login-err').classList.remove('hidden');
         }
+    } catch(e) {
+        console.error("Login request failed", e);
+        document.getElementById('login-err').innerText = "Connection Error";
+        document.getElementById('login-err').classList.remove('hidden');
+    }
+}
 
-        async function login() {
-            const pass = document.getElementById('admin-pass').value;
-            try {
-                const res = await fetch('/admin/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password: pass })
-                });
-                if (res.ok) {
-                    document.getElementById('login-screen').classList.add('hidden');
-                    document.getElementById('dashboard-content').classList.remove('hidden');
-                    fetchReports();
-                } else {
-                    document.getElementById('login-err').classList.remove('hidden');
-                }
-            } catch(e) {
-                console.error("Login request failed", e);
-                // Simple error handling in case server is unreachable
-                document.getElementById('login-err').innerText = "Connection Error";
-                document.getElementById('login-err').classList.remove('hidden');
-            }
+async function fetchReports() {
+    try {
+        const res = await fetch('/admin/reports', {
+            // NEW: Actually send the saved password when asking for the reports!
+            headers: { 'Authorization': `Bearer ${currentAdminPassword}` } 
+        });
+        
+        if (res.ok) {
+            allReports = await res.json();
+            renderReports();
+        } else {
+            console.error("Server rejected the reports request - 401 Unauthorized");
         }
-
-        async function fetchReports() {
-            try {
-                const res = await fetch('/admin/reports');
-                allReports = await res.json();
-                renderReports();
-            } catch(e) {
-                console.error("Error fetching reports", e);
-            }
-        }
+    } catch(e) {
+        console.error("Error fetching reports", e);
+    }
+}
 
         function getScoreClass(score, isBackground = false) {
             const s = parseFloat(score);
