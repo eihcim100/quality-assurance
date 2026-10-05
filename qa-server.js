@@ -76,11 +76,12 @@ app.use(express.static('public'));
 // Tell Express to serve the images from the persistent disk folder
 app.use('/uploads', express.static(uploadDir));
 
-app.use((req, res, next) => {
-    res.header("Access-Control-Allow-Origin", "*");
-    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-    next();
-});
+// Allow CORS for the admin panel
+app.use(cors({
+    origin: ['https://jobs.michieauto.com', 'http://127.0.0.1:5500', 'http://localhost:5500'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Admin-API-Key']
+}));
 
 // --- DEEL API HELPER FUNCTION ---
 async function issueDeelBonus(contractId, amount, reason) {
