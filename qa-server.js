@@ -72,6 +72,24 @@ const upload = multer({ storage: storage, limits: { fileSize: 10 * 1024 * 1024 }
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
+// ULTIMATE CORS FIX - Place this right below app.use(express.static('public'));
+app.use((req, res, next) => {
+    // 1. Allow any website to connect
+    res.header("Access-Control-Allow-Origin", "*");
+    
+    // 2. Allow the necessary methods
+    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    
+    // 3. MUST include 'Authorization' so the browser knows the password header is allowed!
+    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Admin-API-Key");
+    
+    // 4. Catch the hidden browser "Preflight Request" and immediately approve it
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+    }
+    
+    next();
+});
 
 // Tell Express to serve the images from the persistent disk folder
 app.use('/uploads', express.static(uploadDir));
