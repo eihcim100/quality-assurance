@@ -398,7 +398,7 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
             summary: aiReport.summary,
             analysis: formattedAnalysis,
             clientName: leadClientName,
-            clientPhone: leadClientPhone, // <--- ADD THIS NEW LINE RIGHT HERE
+            clientPhone: leadClientPhone, 
             price: leadPrice,
             contractorPay: leadPay,
             aiNotes: leadAiNotes,
@@ -417,6 +417,7 @@ app.post('/api/qa-scan', upload.array('photos', 30), async (req, res) => {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    job_id: details.jobId, // <-- Added jobId to the payload for the CRM webhook
                     customer_name: leadClientName,
                     phone: leadClientPhone,
                     vehicle: `${details.vehicleYear} ${details.vehicleMake} ${details.vehicleModel}`,
